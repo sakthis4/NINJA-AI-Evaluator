@@ -46,9 +46,10 @@ const Instructions: React.FC<InstructionsProps> = ({ onStart, candidateName }) =
           <div>
              <h3 className="font-bold text-lg mb-3 border-b pb-2">Tools & Environment</h3>
              <ul className="list-disc list-inside space-y-2 text-sm text-gray-600">
-               <li><strong>Code Editor:</strong> A built-in code editor is available for Python questions.</li>
+               <li><strong>Code Editor:</strong> A built-in editor is provided for coding questions.</li>
                <li><strong>Auto-Save:</strong> Your answers are saved automatically every few seconds.</li>
-               <li><strong>Code Execution:</strong> Note that Python code execution is disabled; the AI will grade your written code for correctness.</li>
+               <li><strong>JS Execution:</strong> You can run JavaScript code using the 'RUN' button.</li>
+               <li><strong>Python Validation:</strong> Use the 'Check Code' button to get AI-powered feedback on your Python solution.</li>
              </ul>
           </div>
         </div>

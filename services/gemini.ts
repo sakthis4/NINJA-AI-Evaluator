@@ -128,3 +128,57 @@ const createFallbackResult = (questions: Question[], maxScore: number, reason: s
     passFail: 'FAIL'
   };
 };
+
+export const validatePythonCode = async (code: string): Promise<{type: 'output' | 'error', content: string}> => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    return { type: 'error', content: "Validation failed: API Key not configured." };
+  }
+  if (!code.trim()) {
+    return { type: 'output', content: "There is no code to check." };
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
+  const prompt = `
+    You are a Python interpreter. Your task is to EXECUTE the following Python code snippet and return a JSON object with the result.
+    The JSON object must have two keys: "type" and "content".
+
+    - If the code executes successfully, the "type" key must be "output". The "content" key must be the standard output from the code (e.g., from print() statements). If there is no output, "content" must be an empty string.
+    - If the code fails with a syntax or runtime error, the "type" key must be "error". The "content" key must be the standard Python error message (e.g., "SyntaxError: invalid syntax").
+    
+    IMPORTANT: Respond ONLY with the raw JSON object and nothing else. Do not include markdown formatting.
+
+    Example for success with output:
+    {"type": "output", "content": "Hello World\\n"}
+
+    Example for success with no output:
+    {"type": "output", "content": ""}
+
+    Example for error:
+    {"type": "error", "content": "NameError: name 'x' is not defined"}
+
+    Here is the code to execute:
+    \`\`\`python
+    ${code}
+    \`\`\`
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      }
+    });
+    
+    let jsonText = response.text || '{"type": "error", "content": "AI did not return a valid response."}';
+    const result = JSON.parse(jsonText);
+    return result;
+
+  } catch (error) {
+    console.error("AI Python Validation Error", error);
+    return { type: 'error', content: "An error occurred while trying to validate the code with the AI." };
+  }
+};

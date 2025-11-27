@@ -1,7 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Candidate, ExamSubmission, EvaluationResult, QuestionPaper, Question, ExamAssignment } from '../types';
 import { db } from '../services/db';
 import { evaluateExam } from '../services/gemini';
+
+declare const Prism: any; // Make Prism globally available for syntax highlighting
+
+// Sub-component to display the ideal answer key with syntax highlighting
+const IdealAnswerViewer: React.FC<{ question: Question }> = ({ question }) => {
+    const { idealAnswerKey, codeType } = question;
+
+    const highlightedHtml = useMemo(() => {
+        const lang = codeType === 'python' ? 'python' : 'javascript';
+        if (typeof Prism !== 'undefined' && codeType && ['javascript', 'python'].includes(codeType) && Prism.languages[lang]) {
+            // Trim leading/trailing whitespace which can mess up <pre> rendering
+            return Prism.highlight(idealAnswerKey.trim(), Prism.languages[lang], lang);
+        }
+        // Basic escaping for plain text
+        return idealAnswerKey.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }, [idealAnswerKey, codeType]);
+
+    if (codeType === 'python' || codeType === 'javascript') {
+        return (
+            <div className="bg-gray-800 text-white rounded text-xs font-mono overflow-x-auto max-h-60">
+                <pre className="p-3">
+                    <code className={`language-${codeType}`} dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+                </pre>
+            </div>
+        );
+    }
+
+    return <p className="whitespace-pre-wrap text-gray-700 text-xs">{idealAnswerKey}</p>;
+}
 
 type AdminTab = 'SUBMISSIONS' | 'MANAGE_EXAMS' | 'ASSIGN_EXAMS';
 
@@ -29,7 +58,7 @@ const Admin: React.FC = () => {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [qTitle, setQTitle] = useState('');
   const [qText, setQText] = useState('');
-  const [qType, setQType] = useState<'text' | 'javascript'>('text');
+  const [qType, setQType] = useState<'text' | 'javascript' | 'python'>('text');
   const [qMarks, setQMarks] = useState('10');
   const [qKey, setQKey] = useState('');
 
@@ -39,22 +68,18 @@ const Admin: React.FC = () => {
   const [assignStatus, setAssignStatus] = useState('');
 
   const fetchData = async () => {
-    const c = await db.getAllCandidates();
-    setCandidates(c);
+    // Fetch all data in parallel for efficiency and consistency
+    const [c, p, a, s] = await Promise.all([
+      db.getAllCandidates(),
+      db.getAllPapers(),
+      db.getAllAssignments(),
+      db.getAllSubmissions()
+    ]);
     
-    const p = await db.getAllPapers();
+    setCandidates(c);
     setPapers(p);
-
-    const a = await db.getAllAssignments();
     setAssignments(a);
-
-    // Fetch all submissions manually
-    const subs: ExamSubmission[] = [];
-    for (const cand of c) {
-        const s = await db.getSubmission(cand.id);
-        if (s) subs.push(s);
-    }
-    setSubmissions(subs);
+    setSubmissions(s);
   };
 
   useEffect(() => {
@@ -265,6 +290,7 @@ const Admin: React.FC = () => {
                             <select className="w-full border rounded p-2" value={qType} onChange={(e: any) => setQType(e.target.value)}>
                                 <option value="text">Text / Descriptive</option>
                                 <option value="javascript">Code (JS/React)</option>
+                                <option value="python">Code (Python)</option>
                             </select>
                         </div>
                         <div>
@@ -470,8 +496,18 @@ const Admin: React.FC = () => {
                                     {ans || <span className="text-gray-400 italic">No answer provided</span>}
                                 </div>
                             </div>
+
+                            <details className="mt-2">
+                                <summary className="text-xs font-medium text-gray-500 cursor-pointer hover:text-gray-800 select-none">
+                                    Show Ideal Answer Key
+                                </summary>
+                                <div className="mt-2 p-2 bg-gray-100 border rounded">
+                                    <IdealAnswerViewer question={q} />
+                                </div>
+                            </details>
+                            
                             {evalData && (
-                                <div>
+                                <div className="mt-4">
                                     <span className="text-xs font-semibold text-purple-600 uppercase">AI Feedback:</span>
                                     <p className="text-sm text-gray-600 mt-1">{evalData.feedback}</p>
                                 </div>

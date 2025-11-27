@@ -29,7 +29,7 @@ class DatabaseService {
         title: 'Comprehensive Developer Assessment',
         description: 'A structured two-module assessment covering aptitude and technical skills (Python, DL, Git, React, AWS).',
         questions: QUESTIONS.map(q => ({ ...q, marks: q.marks || 10 })),
-        duration: 180, // 180 minutes
+        duration: 90, // 90 minutes
         createdAt: Date.now()
       };
 

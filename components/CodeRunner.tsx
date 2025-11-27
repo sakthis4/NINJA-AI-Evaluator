@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { validatePythonCode } from '../services/gemini';
 
 // Access global Prism object from CDN
 declare const Prism: any;
@@ -12,6 +13,7 @@ interface CodeRunnerProps {
 const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => {
   const [output, setOutput] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(false); // For AI validation
   const [highlightedCode, setHighlightedCode] = useState('');
   
   const preRef = useRef<HTMLPreElement>(null);
@@ -43,11 +45,31 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
     }
   };
 
+  const checkPythonCode = async () => {
+    setIsChecking(true);
+    setOutput(null);
+    setError(null);
+    try {
+      const result = await validatePythonCode(code);
+      if (result.type === 'error') {
+        setError(result.content);
+      } else { // 'output'
+        // Provide a default message if the execution was successful but produced no output
+        const outputContent = result.content.trim() === '' 
+          ? "// Code executed successfully with no output."
+          : result.content;
+        setOutput(outputContent);
+      }
+    } catch(e: any) {
+      setError(e.toString());
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
   const runCode = () => {
     setOutput(null);
     setError(null);
-
-    if (language !== 'javascript') return;
 
     const logs: string[] = [];
     const originalConsoleLog = console.log;
@@ -105,6 +127,21 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
       return 'editor';
   }
 
+  const handleButtonClick = () => {
+    if (language === 'javascript') {
+      runCode();
+    } else if (language === 'python') {
+      checkPythonCode();
+    }
+  };
+  
+  const getButtonContent = () => {
+    if (language === 'python') {
+      return isChecking ? 'Checking...' : 'Check Code';
+    }
+    return 'RUN';
+  };
+
   return (
     <div className="border border-gray-300 rounded-md overflow-hidden bg-[#2d2d2d] text-white shadow-sm flex flex-col h-[500px]">
       {/* Toolbar */}
@@ -119,20 +156,24 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
         </div>
         
         <button
-          onClick={runCode}
+          onClick={handleButtonClick}
           type="button"
-          disabled={language !== 'javascript'}
-          title={language !== 'javascript' ? 'Execution is only available for JavaScript' : 'Run Code'}
+          disabled={isChecking}
+          title={language === 'javascript' ? 'Run Code' : 'Check code for errors using AI'}
           className="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
         >
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-          RUN
+          {language === 'python' ? (
+             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+          ) : (
+             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
+          )}
+          {getButtonContent()}
         </button>
       </div>
       
       <div className="flex flex-col md:flex-row flex-1 min-h-0">
         {/* Editor Area */}
-        <div className={`flex-1 relative group ${output || error ? 'md:border-r border-gray-700' : ''} min-h-[250px]`}>
+        <div className={`flex-1 relative group ${output || error || isChecking ? 'md:border-r border-gray-700' : ''} min-h-[250px]`}>
           
           <pre 
             ref={preRef}
@@ -161,7 +202,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
         </div>
         
         {/* Output Console */}
-        {(output !== null || error !== null) && (
+        {(output !== null || error !== null || isChecking) && (
           <div className="w-full md:w-2/5 bg-[#1e1e1e] flex flex-col min-h-[150px] border-t md:border-t-0 border-gray-700">
             <div className="bg-[#252526] px-3 py-1 text-[10px] uppercase tracking-wider text-gray-400 border-b border-gray-700 flex justify-between items-center shrink-0">
                 <span>Console Output</span>
@@ -169,16 +210,17 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
             </div>
             
             <div className="flex-1 p-3 overflow-auto font-mono text-xs">
+                {isChecking && <div className="text-yellow-400">Checking code with AI...</div>}
                 {error ? (
                   <div className="text-red-400 whitespace-pre-wrap font-bold">
-                    <span className="block mb-1 text-red-500">⚠ Runtime Error:</span>
+                    <span className="block mb-1 text-red-500">⚠ Error:</span>
                     {error}
                   </div>
                 ) : (
                   <pre 
                     className="whitespace-pre-wrap text-gray-300"
                     dangerouslySetInnerHTML={{ 
-                        __html: output ? getHighlightedOutput(output) : '' 
+                        __html: output ? (language === 'javascript' ? getHighlightedOutput(output) : output) : '' 
                     }} 
                   />
                 )}

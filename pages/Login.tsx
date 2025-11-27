@@ -8,13 +8,13 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onRegister, onAdminClick }) => {
-  // Pre-filled data for testing purposes
+  // Initialize with empty fields for candidates to fill
   const [formData, setFormData] = useState({
-    fullName: 'Alex Tester',
-    email: 'alex.tester@example.com',
-    currentCompany: 'Tech Innovations Ltd',
-    currentSalary: '5 LPA',
-    noticePeriod: '15 Days'
+    fullName: '',
+    email: '',
+    currentCompany: '',
+    currentSalary: '',
+    noticePeriod: ''
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);

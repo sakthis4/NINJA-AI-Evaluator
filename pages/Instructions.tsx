@@ -17,8 +17,8 @@ const Instructions: React.FC<InstructionsProps> = ({ onStart, candidateName }) =
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r">
           <h3 className="font-bold text-blue-900 mb-2">Welcome{candidateName ? `, ${candidateName}` : ''}!</h3>
           <p className="text-sm text-blue-800">
-            You are about to start the <strong>Pathfinder Production Tracking Assessment</strong>. 
-            This evaluation tests your React.js knowledge, problem-solving skills, and architectural thinking related to modernizing a legacy application.
+            You are about to start the <strong>Comprehensive Developer Assessment</strong>. 
+            This evaluation tests your foundational aptitude and technical skills across multiple domains.
           </p>
         </div>
 
@@ -39,19 +39,16 @@ const Instructions: React.FC<InstructionsProps> = ({ onStart, candidateName }) =
           <div>
             <h3 className="font-bold text-lg mb-3 border-b pb-2">Exam Format</h3>
             <ul className="list-disc list-inside space-y-2 text-sm text-gray-600">
-              <li><strong>Section A:</strong> Core React & JavaScript</li>
-              <li><strong>Section B:</strong> Advanced State Management</li>
-              <li><strong>Section C:</strong> Frontend Architecture</li>
-              <li><strong>Section D:</strong> UX & Performance</li>
-              <li><strong>Section E:</strong> Collaboration & Agile</li>
+              <li><strong>Module 1:</strong> Aptitude (20 questions on reasoning and analytics).</li>
+              <li><strong>Module 2:</strong> Technical Assessment (Python, DL, Git, React, AWS).</li>
             </ul>
           </div>
           <div>
              <h3 className="font-bold text-lg mb-3 border-b pb-2">Tools & Environment</h3>
              <ul className="list-disc list-inside space-y-2 text-sm text-gray-600">
-               <li><strong>Code Editor:</strong> A built-in code runner is available for JavaScript programming questions.</li>
+               <li><strong>Code Editor:</strong> A built-in code editor is available for Python questions.</li>
                <li><strong>Auto-Save:</strong> Your answers are saved automatically every few seconds.</li>
-               <li><strong>Console Output:</strong> You can execute your code and view console logs directly in the editor.</li>
+               <li><strong>Code Execution:</strong> Note that Python code execution is disabled; the AI will grade your written code for correctness.</li>
              </ul>
           </div>
         </div>

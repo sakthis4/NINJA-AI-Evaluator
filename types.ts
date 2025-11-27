@@ -15,7 +15,7 @@ export interface Question {
   title: string;
   text: string;
   idealAnswerKey: string;
-  codeType?: 'javascript' | 'text';
+  codeType?: 'javascript' | 'text' | 'python';
   marks?: number; // Configurable marks per question
 }
 

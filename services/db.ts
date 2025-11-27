@@ -17,33 +17,71 @@ class DatabaseService {
   }
 
   private seedDefaults() {
-    // Ensure the default exam exists
+    // This function now acts as an "upsert" for the default paper and tester assignment.
+    // It runs on every app load to ensure the latest config from `constants.ts` is reflected.
     if (typeof localStorage !== 'undefined') {
       const papers = this.getList<QuestionPaper>(DB_KEYS.PAPERS);
-      if (papers.length === 0) {
-        const defaultPaper: QuestionPaper = {
-          id: 'default-pathfinder-v1',
-          title: 'Default: Pathfinder Production Tracking',
-          description: 'Standard assessment for React Developer role involving the Pathfinder legacy modernization scenario.',
-          questions: QUESTIONS.map(q => ({ ...q, marks: 10 })), // Default 10 marks
-          duration: 60, // Default 60 minutes
-          createdAt: Date.now()
-        };
-        this.saveList(DB_KEYS.PAPERS, [defaultPaper]);
+      const defaultPaperId = 'comprehensive-dev-v1';
+      const paperIndex = papers.findIndex(p => p.id === defaultPaperId);
 
-        // Seed default assignment for the tester
-        const assignments = this.getList<ExamAssignment>(DB_KEYS.ASSIGNMENTS);
-        if (assignments.length === 0) {
-          assignments.push({
-            id: 'assign-default-1',
-            email: 'alex.tester@example.com',
-            paperId: 'default-pathfinder-v1',
-            assignedBy: 'System',
-            assignedAt: Date.now()
-          });
-          this.saveList(DB_KEYS.ASSIGNMENTS, assignments);
-        }
+      const newDefaultPaper: QuestionPaper = {
+        id: defaultPaperId,
+        title: 'Comprehensive Developer Assessment',
+        description: 'A structured two-module assessment covering aptitude and technical skills (Python, DL, Git, React, AWS).',
+        questions: QUESTIONS.map(q => ({ ...q, marks: q.marks || 10 })),
+        duration: 180, // 180 minutes
+        createdAt: Date.now()
+      };
+
+      if (paperIndex !== -1) {
+        // Update existing paper to reflect latest questions from constants
+        newDefaultPaper.createdAt = papers[paperIndex].createdAt; // Keep original creation date
+        papers[paperIndex] = newDefaultPaper;
+      } else {
+        // Add if it doesn't exist
+        papers.push(newDefaultPaper);
       }
+      this.saveList(DB_KEYS.PAPERS, papers);
+
+      const assignments = this.getList<ExamAssignment>(DB_KEYS.ASSIGNMENTS);
+      
+      // --- Upsert for alex.tester@example.com ---
+      const testerEmail = 'alex.tester@example.com';
+      const testerAssignmentIndex = assignments.findIndex(a => a.email.trim().toLowerCase() === testerEmail);
+      
+      const testerAssignment: ExamAssignment = {
+        id: 'assign-default-comp-dev-1',
+        email: testerEmail,
+        paperId: defaultPaperId,
+        assignedBy: 'System',
+        assignedAt: Date.now()
+      };
+
+      if (testerAssignmentIndex !== -1) {
+          assignments[testerAssignmentIndex].paperId = defaultPaperId;
+      } else {
+          assignments.push(testerAssignment);
+      }
+      
+      // --- Upsert for srihariprasath44@gmail.com ---
+      const srihariEmail = 'srihariprasath44@gmail.com';
+      const srihariAssignmentIndex = assignments.findIndex(a => a.email.trim().toLowerCase() === srihariEmail);
+      
+      const srihariAssignment: ExamAssignment = {
+        id: 'assign-srihari-comp-dev-1',
+        email: srihariEmail,
+        paperId: defaultPaperId,
+        assignedBy: 'System',
+        assignedAt: Date.now()
+      };
+
+      if (srihariAssignmentIndex !== -1) {
+          assignments[srihariAssignmentIndex].paperId = defaultPaperId;
+      } else {
+          assignments.push(srihariAssignment);
+      }
+
+      this.saveList(DB_KEYS.ASSIGNMENTS, assignments);
     }
   }
 
@@ -70,11 +108,12 @@ class DatabaseService {
   async assignExam(email: string, paperId: string): Promise<void> {
     await delay(200);
     const list = this.getList<ExamAssignment>(DB_KEYS.ASSIGNMENTS);
+    const trimmedEmail = email.trim().toLowerCase();
     // Remove existing assignment for this email if any
-    const filtered = list.filter(a => a.email.toLowerCase() !== email.toLowerCase());
+    const filtered = list.filter(a => a.email.trim().toLowerCase() !== trimmedEmail);
     filtered.push({
       id: crypto.randomUUID(),
-      email: email.toLowerCase(),
+      email: trimmedEmail,
       paperId,
       assignedBy: 'Admin',
       assignedAt: Date.now()
@@ -85,7 +124,7 @@ class DatabaseService {
   async getAssignment(email: string): Promise<ExamAssignment | undefined> {
     await delay(100);
     const list = this.getList<ExamAssignment>(DB_KEYS.ASSIGNMENTS);
-    return list.find(a => a.email.toLowerCase() === email.toLowerCase());
+    return list.find(a => a.email.trim().toLowerCase() === email.trim().toLowerCase());
   }
 
   async getAllAssignments(): Promise<ExamAssignment[]> {
@@ -126,8 +165,10 @@ class DatabaseService {
   async registerCandidate(candidate: Candidate): Promise<{ status: 'CREATED' | 'RESUMED' | 'REJECTED', candidate?: Candidate, error?: string }> {
     await delay(300);
     
+    const trimmedEmail = candidate.email.trim().toLowerCase();
+    
     // 1. Check Assignment
-    const assignment = await this.getAssignment(candidate.email);
+    const assignment = await this.getAssignment(trimmedEmail);
     if (!assignment) {
         return { status: 'REJECTED', error: 'No exam has been assigned to this email address.' };
     }
@@ -139,14 +180,10 @@ class DatabaseService {
     const submissions = this.getList<ExamSubmission>(DB_KEYS.SUBMISSIONS);
     
     // Find all records for this email
-    const userCandidates = list.filter(c => c.email.toLowerCase() === candidate.email.toLowerCase());
+    const userCandidates = list.filter(c => c.email.trim().toLowerCase() === trimmedEmail);
 
-    // 2. Check for ANY active session to resume (Status IN_PROGRESS or No Submission record yet)
-    // We prioritize resuming an active session over creating a new one, even for the tester.
     const activeCandidate = userCandidates.find(c => {
         const sub = submissions.find(s => s.candidateId === c.id);
-        // If no submission record exists, they registered but didn't init exam => effectively in progress
-        // If submission exists, check status
         return !sub || sub.status === 'IN_PROGRESS';
     });
 
@@ -160,18 +197,13 @@ class DatabaseService {
         return { status: 'RESUMED', candidate: activeCandidate };
     }
 
-    // 3. No active session found. Check if they have completed it before.
     const hasPastSubmission = userCandidates.some(c => {
          const sub = submissions.find(s => s.candidateId === c.id);
          return sub && (sub.status === 'SUBMITTED' || sub.status === 'GRADED');
     });
 
-    if (hasPastSubmission) {
-        // If it is the default tester, allow them to create a NEW candidate record (Retake)
-        if (candidate.email.toLowerCase() !== 'alex.tester@example.com') {
-             return { status: 'REJECTED', error: 'Assessment already submitted.' }; 
-        }
-        // If Alex Tester, we deliberately fall through to create a new record
+    if (hasPastSubmission && trimmedEmail !== 'alex.tester@example.com') {
+         return { status: 'REJECTED', error: 'Assessment already submitted.' }; 
     }
 
     // 4. New Candidate
@@ -194,28 +226,13 @@ class DatabaseService {
   async deleteCandidate(id: string): Promise<void> {
     await delay(200);
     
-    // Remove Candidate
     let candidates = this.getList<Candidate>(DB_KEYS.CANDIDATES);
-    const candidateToDelete = candidates.find(c => c.id === id);
     candidates = candidates.filter(c => c.id !== id);
     this.saveList(DB_KEYS.CANDIDATES, candidates);
 
-    // Remove Submission
     let submissions = this.getList<ExamSubmission>(DB_KEYS.SUBMISSIONS);
     submissions = submissions.filter(s => s.candidateId !== id);
     this.saveList(DB_KEYS.SUBMISSIONS, submissions);
-
-    // Remove Assignment (optional: only if we want to completely wipe them, but usually assignment is by email)
-    // If we delete the assignment, they can't log in again. 
-    // Let's keep assignment so they can potentially be re-added, OR remove it. 
-    // Generally "Delete User" in this context implies wiping the slate clean.
-    if (candidateToDelete) {
-        let assignments = this.getList<ExamAssignment>(DB_KEYS.ASSIGNMENTS);
-        // Note: Assignment is by email, not candidate ID. 
-        // We will remove assignment for that email to ensure full clean slate.
-        assignments = assignments.filter(a => a.email.toLowerCase() !== candidateToDelete.email.toLowerCase());
-        this.saveList(DB_KEYS.ASSIGNMENTS, assignments);
-    }
   }
 
   // --- Submissions ---
@@ -274,6 +291,11 @@ class DatabaseService {
     await delay(200);
     const list = this.getList<ExamSubmission>(DB_KEYS.SUBMISSIONS);
     return list.find(s => s.candidateId === candidateId);
+  }
+
+  async getAllSubmissions(): Promise<ExamSubmission[]> {
+    await delay(100);
+    return this.getList<ExamSubmission>(DB_KEYS.SUBMISSIONS);
   }
 }
 

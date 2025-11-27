@@ -63,18 +63,9 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
           setProctorLogs(sub.proctorLogs);
         }
         
+        // If there's a saved draft, load it. Otherwise, start fresh.
         if (sub.answers && Object.keys(sub.answers).length > 0) {
            setAnswers(sub.answers);
-        } else {
-           // STRICT CHECK: Only pre-fill answers if it is the Default Test User
-           // This prevents regular candidates from seeing the answers.
-           if (candidate.email === 'alex.tester@example.com') {
-               const initialAnswers: Record<string, string> = {};
-               paper.questions.forEach(q => {
-                   initialAnswers[q.id] = q.idealAnswerKey;
-               });
-               setAnswers(initialAnswers);
-           }
         }
         
         // Calculate Time Remaining
@@ -217,18 +208,17 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
       <Proctoring isActive={!isSubmitting} onViolation={handleProctorViolation} />
 
       <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded shadow-sm">
-        <h3 className="text-blue-800 font-bold mb-2">Scenario Context: Pathfinder</h3>
+        <h3 className="text-blue-800 font-bold mb-2">Scenario Context</h3>
         <p className="text-blue-900 text-sm whitespace-pre-line">{EXAM_CONTEXT}</p>
       </div>
 
       <div className="bg-white shadow rounded-lg p-4 flex justify-between items-center sticky top-0 z-10 border-b">
         <div className="flex items-center gap-6">
-            <span className="text-gray-600 font-medium">Progress: {Object.keys(answers).length} / {questions.length} Answered</span>
+            <span className="text-gray-600 font-medium">Progress: {Object.keys(answers).filter(k => answers[k].trim()).length} / {questions.length} Answered</span>
             <div className="h-6 w-px bg-gray-300"></div>
             {renderSaveStatus()}
         </div>
         
-        {/* Timer Display */}
         {timeRemaining !== null && (
             <div className={`text-xl bg-gray-100 px-4 py-1 rounded border ${getTimerColor()}`}>
                 Time Left: {formatTime(timeRemaining)}
@@ -248,7 +238,7 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
       </div>
 
       <div className="space-y-6">
-        {questions.map((q, index) => (
+        {questions.map((q) => (
           <div key={q.id} className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -263,11 +253,11 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
             </div>
             <p className="text-gray-700 mb-4 whitespace-pre-line">{q.text}</p>
             
-            {q.codeType === 'javascript' ? (
+            {(q.codeType === 'javascript' || q.codeType === 'python') ? (
                <CodeRunner 
                  code={answers[q.id] || ''} 
                  onChange={(val) => handleAnswerChange(q.id, val)}
-                 language="javascript"
+                 language={q.codeType}
                />
             ) : (
               <textarea

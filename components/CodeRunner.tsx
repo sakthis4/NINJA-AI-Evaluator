@@ -6,7 +6,7 @@ declare const Prism: any;
 interface CodeRunnerProps {
   code: string;
   onChange: (newCode: string) => void;
-  language: 'javascript' | 'text';
+  language: 'javascript' | 'text' | 'python';
 }
 
 const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => {
@@ -19,12 +19,18 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
 
   // Handle Syntax Highlighting for Input
   useEffect(() => {
-    if (language === 'javascript' && typeof Prism !== 'undefined') {
-      // Highlight the code using Prism
-      const html = Prism.highlight(code || '', Prism.languages.javascript, 'javascript');
-      setHighlightedCode(html);
+    if (typeof Prism !== 'undefined' && (language === 'javascript' || language === 'python')) {
+      const grammar = language === 'python' ? Prism.languages.python : Prism.languages.javascript;
+      const langClass = language === 'python' ? 'python' : 'javascript';
+      
+      if (grammar) {
+        const html = Prism.highlight(code || '', grammar, langClass);
+        setHighlightedCode(html);
+      } else {
+        setHighlightedCode(code.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+      }
     } else {
-      // Fallback if not JS or Prism missing
+      // Fallback if not a code language or Prism missing
       setHighlightedCode(code.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
     }
   }, [code, language]);
@@ -84,8 +90,6 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
   // Helper to highlight output logs (basic JSON highlighting)
   const getHighlightedOutput = (text: string) => {
     if (typeof Prism !== 'undefined') {
-       // Simple heuristic: if it starts with { or [, treat as JSON for highlighting
-       // otherwise treat as JS (comments etc)
        const grammar = (text.trim().startsWith('{') || text.trim().startsWith('[')) 
           ? Prism.languages.json 
           : Prism.languages.javascript;
@@ -94,6 +98,12 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
     }
     return text;
   };
+
+  const getFileName = () => {
+      if (language === 'javascript') return 'main.js';
+      if (language === 'python') return 'script.py';
+      return 'editor';
+  }
 
   return (
     <div className="border border-gray-300 rounded-md overflow-hidden bg-[#2d2d2d] text-white shadow-sm flex flex-col h-[500px]">
@@ -104,26 +114,26 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
             <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
             <span className="w-3 h-3 rounded-full bg-green-500"></span>
             <span className="ml-2 text-xs font-mono text-gray-400 uppercase tracking-wider">
-                {language === 'javascript' ? 'main.js' : 'editor'}
+                {getFileName()}
             </span>
         </div>
-        {language === 'javascript' && (
-          <button
-            onClick={runCode}
-            type="button"
-            className="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
-          >
-            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-            RUN
-          </button>
-        )}
+        
+        <button
+          onClick={runCode}
+          type="button"
+          disabled={language !== 'javascript'}
+          title={language !== 'javascript' ? 'Execution is only available for JavaScript' : 'Run Code'}
+          className="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
+        >
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
+          RUN
+        </button>
       </div>
       
       <div className="flex flex-col md:flex-row flex-1 min-h-0">
         {/* Editor Area */}
         <div className={`flex-1 relative group ${output || error ? 'md:border-r border-gray-700' : ''} min-h-[250px]`}>
           
-          {/* Syntax Highlight Layer (Background) */}
           <pre 
             ref={preRef}
             className="absolute inset-0 m-0 p-4 font-mono text-sm leading-6 whitespace-pre-wrap break-words pointer-events-none overflow-hidden"
@@ -131,12 +141,11 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
             aria-hidden="true"
           >
             <code 
-              className="language-javascript"
+              className={`language-${language}`}
               dangerouslySetInnerHTML={{ __html: highlightedCode + '<br/>' }} 
             />
           </pre>
 
-          {/* Input Layer (Foreground) - Transparent Text, White Caret */}
           <textarea
             ref={textareaRef}
             value={code}
@@ -144,7 +153,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
             onScroll={handleScroll}
             className="absolute inset-0 w-full h-full p-4 font-mono text-sm leading-6 bg-transparent text-transparent caret-white resize-none focus:outline-none overflow-auto"
             style={{ fontFamily: '"Fira Code", "Consolas", monospace' }}
-            placeholder={language === 'javascript' ? "// Write your solution here..." : "Type your answer..."}
+            placeholder="// Write your solution here..."
             spellCheck={false}
             autoCapitalize="off"
             autoComplete="off"

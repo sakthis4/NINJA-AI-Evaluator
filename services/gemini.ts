@@ -53,10 +53,8 @@ export const evaluateExam = async (
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: {
-        role: 'user',
-        parts: [{ text: promptParts.join('\n') }]
-      },
+      // FIX: The 'contents' property for a single text prompt should be a string, not a Content object with a role.
+      contents: promptParts.join('\n'),
       config: {
         responseMimeType: 'application/json',
         responseSchema: {

@@ -8,6 +8,7 @@ import Admin from './pages/Admin';
 import AdminLogin from './pages/AdminLogin';
 import ThankYou from './pages/ThankYou';
 import { db } from './services/db';
+import { ToastProvider } from './contexts/ToastContext';
 
 const App: React.FC = () => {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(AppRoute.LOGIN);
@@ -92,13 +93,15 @@ const App: React.FC = () => {
   }
 
   return (
-    <Layout 
-      user={currentUser ? { name: currentUser.fullName } : undefined} 
-      onLogout={handleLogout}
-      isAdmin={isAdmin}
-    >
-      {renderContent()}
-    </Layout>
+    <ToastProvider>
+      <Layout 
+        user={currentUser ? { name: currentUser.fullName } : undefined} 
+        onLogout={handleLogout}
+        isAdmin={isAdmin}
+      >
+        {renderContent()}
+      </Layout>
+    </ToastProvider>
   );
 };
 

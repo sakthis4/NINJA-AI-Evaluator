@@ -1,3 +1,4 @@
+
 export interface Candidate {
   id: string;
   fullName: string;
@@ -70,6 +71,15 @@ export interface EvaluationResult {
   summary: string;
   questionEvaluations: Record<string, QuestionEvaluation>;
   passFail: 'PASS' | 'FAIL';
+}
+
+export type ToastType = 'info' | 'success' | 'warning' | 'error';
+
+export interface Toast {
+  id: string;
+  message: string;
+  type: ToastType;
+  duration?: number;
 }
 
 export enum AppRoute {

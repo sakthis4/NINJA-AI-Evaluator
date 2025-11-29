@@ -5,6 +5,7 @@ import Proctoring from '../components/Proctoring';
 import CodeRunner from '../components/CodeRunner';
 import { db } from '../services/db';
 import { evaluateExam } from '../services/gemini';
+import { useToast } from '../contexts/ToastContext';
 
 interface ExamProps {
   candidateId: string;
@@ -31,6 +32,7 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const { addToast } = useToast();
   
   // Timer State
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
@@ -117,10 +119,31 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
 
   const handleProctorViolation = useCallback((log: ProctorLog) => {
     setProctorLogs(prev => [...prev, log]);
-    if (log.type === 'TAB_SWITCH' || log.type === 'COPY_ATTEMPT') {
-      console.warn(`Proctoring: ${log.type} detected.`);
+    
+    // Determine message based on log type
+    let message = '';
+    switch(log.type) {
+        case 'TAB_SWITCH':
+            message = 'Warning: Tab switching is monitored. Please stay on the exam page.';
+            break;
+        case 'COPY_ATTEMPT':
+            message = 'Warning: Copying content is disabled and logged.';
+            break;
+        case 'PASTE_ATTEMPT':
+            message = 'Warning: Pasting content is disabled and logged.';
+            break;
+        case 'CONTEXT_MENU':
+            message = 'Warning: Right-click menu is disabled.';
+            break;
+        case 'LOST_FOCUS':
+            message = 'Warning: Please keep the exam window in focus.';
+            break;
     }
-  }, []);
+    
+    if (message) {
+        addToast(message, 'warning', 4000);
+    }
+  }, [addToast]);
 
   const handleAnswerChange = (qId: string, text: string) => {
     setAnswers(prev => ({ ...prev, [qId]: text }));

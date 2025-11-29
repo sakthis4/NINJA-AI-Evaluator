@@ -18,11 +18,25 @@
                 700: '#4338ca',
                 900: '#312e81',
               }
+            },
+            animation: {
+              'slide-in': 'slideIn 0.3s ease-out forwards',
+              'fade-out': 'fadeOut 0.3s ease-in forwards',
             }
           }
         }
       }
     </script>
+    <style>
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+    </style>
     <!-- PrismJS for Syntax Highlighting -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>

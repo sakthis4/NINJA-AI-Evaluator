@@ -1,15 +1,16 @@
 {
   "name": "s4carlisle-evaluation-system",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
+    "firebase": "^11.0.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

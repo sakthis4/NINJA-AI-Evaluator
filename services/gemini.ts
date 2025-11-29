@@ -29,7 +29,7 @@ export const evaluateExam = async (
     IMPORTANT INSTRUCTIONS FOR GRADING:
     1. The 'Context/Ideal Key' provided is a GUIDELINE for expected concepts, NOT a strict answer key. Do not require exact text matches.
     2. If the candidate provides a valid alternative solution or uses different wording that demonstrates correct understanding, award appropriate marks.
-    3. For coding questions (Javascript/React), focus on the logic, state management, and correct usage of hooks. Minor syntax errors should be penalized slightly, but not result in a zero score if the logic is sound.
+    3. For coding questions (Javascript/React/Python/Java/etc), focus on the logic, state management, algorithmic efficiency and syntax.
     4. For architectural/design questions, evaluate the feasibility and reasoning of their approach.
     5. Return the output strictly in JSON format.
     6. For each question, provide a score (0 to Max Marks) and brief feedback (max 2 sentences).
@@ -127,10 +127,10 @@ const createFallbackResult = (questions: Question[], maxScore: number, reason: s
   };
 };
 
-export const validatePythonCode = async (code: string): Promise<{type: 'output' | 'error', content: string}> => {
+export const executeCodeWithAI = async (code: string, language: string): Promise<{type: 'output' | 'error', content: string}> => {
   const apiKey = getApiKey();
   if (!apiKey) {
-    return { type: 'error', content: "Validation failed: API Key not configured." };
+    return { type: 'error', content: "Execution failed: API Key not configured." };
   }
   if (!code.trim()) {
     return { type: 'output', content: "There is no code to check." };
@@ -139,13 +139,18 @@ export const validatePythonCode = async (code: string): Promise<{type: 'output' 
   const ai = new GoogleGenAI({ apiKey });
 
   const systemInstruction = `
-    You are a Python interpreter. Your task is to EXECUTE the provided Python code snippet and return a JSON object with the result.
-    The JSON object must have two keys: "type" and "content".
-
-    - If the code executes successfully, the "type" key must be "output". The "content" key must be the standard output from the code (e.g., from print() statements). If there is no output, "content" must be an empty string.
-    - If the code fails with a syntax or runtime error, the "type" key must be "error". The "content" key must be the standard Python error message (e.g., "SyntaxError: invalid syntax").
+    You are a Code Execution Engine. Your task is to act as a compiler/interpreter for the programming language: "${language}".
     
-    IMPORTANT: Respond ONLY with the raw JSON object and nothing else. Do not include markdown formatting or any explanatory text.
+    1. Analyze the provided code for syntax correctness.
+    2. SIMULATE the execution of the code as if it were run in a standard environment for that language.
+    3. Return the Standard Output (stdout) if successful.
+    4. Return the Compiler/Runtime Error message if it fails.
+    
+    The output must be a JSON object with two keys:
+    - "type": "output" (for success/stdout) or "error" (for syntax/runtime errors).
+    - "content": The actual output string or error message.
+
+    IMPORTANT: Do NOT provide hints, fixes, or explanations. Just the raw execution output or error.
   `;
 
   try {
@@ -172,7 +177,7 @@ export const validatePythonCode = async (code: string): Promise<{type: 'output' 
     return result;
 
   } catch (error) {
-    console.error("AI Python Validation Error", error);
-    return { type: 'error', content: "An error occurred while trying to validate the code with the AI." };
+    console.error("AI Code Execution Error", error);
+    return { type: 'error', content: "An error occurred while trying to execute the code with the AI." };
   }
 };

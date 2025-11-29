@@ -15,7 +15,7 @@ export interface Question {
   title: string;
   text: string;
   idealAnswerKey: string;
-  codeType?: 'javascript' | 'text' | 'python';
+  codeType?: string; // 'javascript' | 'python' | 'java' | 'cpp' | 'text' etc.
   marks?: number; // Configurable marks per question
 }
 
@@ -61,6 +61,7 @@ export interface ExamSubmission {
 export interface QuestionEvaluation {
   score: number;
   feedback: string;
+  passFail?: 'PASS' | 'FAIL';
 }
 
 export interface EvaluationResult {

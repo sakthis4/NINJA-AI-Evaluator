@@ -491,6 +491,22 @@ class DatabaseService {
     return newSubmission;
   }
 
+  async deleteSubmission(candidateId: string): Promise<void> {
+    if (this.useLocalStorage) {
+        let submissions = this.getLS<ExamSubmission>(LS_KEYS.SUBMISSIONS);
+        submissions = submissions.filter(s => s.candidateId !== candidateId);
+        this.setLS(LS_KEYS.SUBMISSIONS, submissions);
+        return;
+    }
+
+    const submissionsRef = collection(this.db, COLLECTIONS.SUBMISSIONS);
+    const q = query(submissionsRef, where('candidateId', '==', candidateId));
+    const snapshot = await getDocs(q);
+    snapshot.forEach(async (d) => {
+        await deleteDoc(d.ref);
+    });
+  }
+
   async saveDraft(candidateId: string, answers: Record<string, string>, logs: ProctorLog[]): Promise<void> {
     if (this.useLocalStorage) {
         const submissions = this.getLS<ExamSubmission>(LS_KEYS.SUBMISSIONS);

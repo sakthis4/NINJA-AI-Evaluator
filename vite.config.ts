@@ -2,7 +2,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-import process from 'process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +23,15 @@ export default defineConfig(({ mode }) => {
       resolve: {
         alias: {
           '@': __dirname,
+        }
+      },
+      build: {
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    vendor: ['react', 'react-dom', 'firebase/app', 'firebase/firestore', '@google/genai']
+                }
+            }
         }
       }
     };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { validatePythonCode } from '../services/gemini';
+import { executeCodeWithAI } from '../services/gemini';
 
 // Access global Prism object from CDN
 declare const Prism: any;
@@ -7,7 +7,7 @@ declare const Prism: any;
 interface CodeRunnerProps {
   code: string;
   onChange: (newCode: string) => void;
-  language: 'javascript' | 'text' | 'python';
+  language: string; // Updated to generic string
 }
 
 const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => {
@@ -21,9 +21,14 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
 
   // Handle Syntax Highlighting for Input
   useEffect(() => {
-    if (typeof Prism !== 'undefined' && (language === 'javascript' || language === 'python')) {
-      const grammar = language === 'python' ? Prism.languages.python : Prism.languages.javascript;
-      const langClass = language === 'python' ? 'python' : 'javascript';
+    if (typeof Prism !== 'undefined') {
+      let langClass = language.toLowerCase();
+      // Map basic names to Prism classes if needed
+      if (langClass === 'c++') langClass = 'cpp';
+      if (langClass === 'c#') langClass = 'csharp';
+      
+      // Default to generic 'clike' or 'javascript' if grammar not found
+      const grammar = Prism.languages[langClass] || Prism.languages.javascript;
       
       if (grammar) {
         const html = Prism.highlight(code || '', grammar, langClass);
@@ -45,18 +50,30 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
     }
   };
 
-  const checkPythonCode = async () => {
+  const handleRunCode = async () => {
+    // If it's purely Javascript, we can still run it locally for speed, 
+    // OR we can send everything to AI to be consistent. 
+    // Given the prompt "coding window should support all languages", AI is safer for compilation/output consistency.
+    // However, JS 'new Function' is very fast for simple logic. Let's keep local for JS, AI for others.
+    
+    if (language === 'javascript') {
+        runJsLocally();
+    } else {
+        runWithAI();
+    }
+  };
+
+  const runWithAI = async () => {
     setIsChecking(true);
     setOutput(null);
     setError(null);
     try {
-      const result = await validatePythonCode(code);
+      const result = await executeCodeWithAI(code, language);
       if (result.type === 'error') {
         setError(result.content);
       } else { // 'output'
-        // Provide a default message if the execution was successful but produced no output
         const outputContent = result.content.trim() === '' 
-          ? "// Code executed successfully with no output."
+          ? `// ${language} code executed successfully with no output.`
           : result.content;
         setOutput(outputContent);
       }
@@ -67,7 +84,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
     }
   };
 
-  const runCode = () => {
+  const runJsLocally = () => {
     setOutput(null);
     setError(null);
 
@@ -124,22 +141,18 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
   const getFileName = () => {
       if (language === 'javascript') return 'main.js';
       if (language === 'python') return 'script.py';
-      return 'editor';
+      if (language === 'java') return 'Main.java';
+      if (language === 'cpp') return 'main.cpp';
+      if (language === 'csharp') return 'Program.cs';
+      if (language === 'sql') return 'query.sql';
+      return `script.${language.slice(0, 3)}`;
   }
 
-  const handleButtonClick = () => {
-    if (language === 'javascript') {
-      runCode();
-    } else if (language === 'python') {
-      checkPythonCode();
-    }
-  };
-  
   const getButtonContent = () => {
-    if (language === 'python') {
-      return isChecking ? 'Checking...' : 'Check Code';
+    if (language !== 'javascript') {
+      return isChecking ? 'Running...' : `Run (${language})`;
     }
-    return 'RUN';
+    return 'Run (JS)';
   };
 
   return (
@@ -156,17 +169,13 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
         </div>
         
         <button
-          onClick={handleButtonClick}
+          onClick={handleRunCode}
           type="button"
           disabled={isChecking}
-          title={language === 'javascript' ? 'Run Code' : 'Check code for errors using AI'}
+          title={`Execute ${language} code`}
           className="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
         >
-          {language === 'python' ? (
-             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-          ) : (
-             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-          )}
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
           {getButtonContent()}
         </button>
       </div>
@@ -182,7 +191,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
             aria-hidden="true"
           >
             <code 
-              className={`language-${language}`}
+              className={`language-${language === 'c++' ? 'cpp' : language}`}
               dangerouslySetInnerHTML={{ __html: highlightedCode + '<br/>' }} 
             />
           </pre>
@@ -194,7 +203,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
             onScroll={handleScroll}
             className="absolute inset-0 w-full h-full p-4 font-mono text-sm leading-6 bg-transparent text-transparent caret-white resize-none focus:outline-none overflow-auto"
             style={{ fontFamily: '"Fira Code", "Consolas", monospace' }}
-            placeholder="// Write your solution here..."
+            placeholder={`// Write your ${language} solution here...`}
             spellCheck={false}
             autoCapitalize="off"
             autoComplete="off"
@@ -210,7 +219,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
             </div>
             
             <div className="flex-1 p-3 overflow-auto font-mono text-xs">
-                {isChecking && <div className="text-yellow-400">Checking code with AI...</div>}
+                {isChecking && <div className="text-yellow-400">Executing code on remote server...</div>}
                 {error ? (
                   <div className="text-red-400 whitespace-pre-wrap font-bold">
                     <span className="block mb-1 text-red-500">⚠ Error:</span>

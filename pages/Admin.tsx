@@ -10,20 +10,20 @@ const IdealAnswerViewer: React.FC<{ question: Question }> = ({ question }) => {
     const { idealAnswerKey, codeType } = question;
 
     const highlightedHtml = useMemo(() => {
-        const lang = codeType === 'python' ? 'python' : 'javascript';
-        if (typeof Prism !== 'undefined' && codeType && ['javascript', 'python'].includes(codeType) && Prism.languages[lang]) {
-            // Trim leading/trailing whitespace which can mess up <pre> rendering
+        let lang = codeType || 'javascript';
+        if (lang === 'c++') lang = 'cpp';
+
+        if (typeof Prism !== 'undefined' && codeType && codeType !== 'text' && Prism.languages[lang]) {
             return Prism.highlight(idealAnswerKey.trim(), Prism.languages[lang], lang);
         }
-        // Basic escaping for plain text
         return idealAnswerKey.replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }, [idealAnswerKey, codeType]);
 
-    if (codeType === 'python' || codeType === 'javascript') {
+    if (codeType && codeType !== 'text') {
         return (
             <div className="bg-gray-800 text-white rounded text-xs font-mono overflow-x-auto max-h-60">
                 <pre className="p-3">
-                    <code className={`language-${codeType}`} dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+                    <code className={`language-${codeType === 'c++' ? 'cpp' : codeType}`} dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
                 </pre>
             </div>
         );
@@ -59,7 +59,7 @@ const Admin: React.FC = () => {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [qTitle, setQTitle] = useState('');
   const [qText, setQText] = useState('');
-  const [qType, setQType] = useState<'text' | 'javascript' | 'python'>('text');
+  const [qType, setQType] = useState<string>('text');
   const [qMarks, setQMarks] = useState('10');
   const [qKey, setQKey] = useState('');
 
@@ -94,6 +94,15 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleResetSubmission = async (candidateId: string, name: string) => {
+    if (window.confirm(`Are you sure you want to reset the submission for ${name}? This will delete their answers and allow them to start over. The user account will remain.`)) {
+        await db.deleteSubmission(candidateId);
+        await fetchData();
+        // If viewing detail, close it
+        if (selectedCandidateId === candidateId) setSelectedCandidateId(null);
+    }
+  };
+
   const handleDeletePaper = async (id: string, title: string) => {
     if (window.confirm(`Are you sure you want to delete the exam paper "${title}"? This action cannot be undone.`)) {
         await db.deleteQuestionPaper(id);
@@ -104,6 +113,32 @@ const Admin: React.FC = () => {
         }
         await fetchData();
     }
+  };
+
+  const handleExportPaper = (paper: QuestionPaper) => {
+    let csvContent = "data:text/csv;charset=utf-8,Section,Title,QuestionText,IdealAnswer,Type,Marks\n";
+    
+    paper.questions.forEach(q => {
+        // Escape quotes by doubling them, wrap fields in quotes
+        const safe = (str: string) => `"${(str || '').replace(/"/g, '""')}"`;
+        const row = [
+            safe(q.section),
+            safe(q.title),
+            safe(q.text),
+            safe(q.idealAnswerKey),
+            safe(q.codeType || 'text'),
+            q.marks || 10
+        ].join(",");
+        csvContent += row + "\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${paper.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleEvaluate = async (submission: ExamSubmission) => {
@@ -129,7 +164,7 @@ const Admin: React.FC = () => {
 
   const handleDownloadTemplate = () => {
     // Create a CSV template with 20 rows: 10 Aptitude + 10 Technical
-    let csvContent = "data:text/csv;charset=utf-8,Section,Title,QuestionText,IdealAnswer,Type(text/python/javascript),Marks\n";
+    let csvContent = "data:text/csv;charset=utf-8,Section,Title,QuestionText,IdealAnswer,Type(text/python/javascript/java/cpp),Marks\n";
     
     // First 10: Aptitude
     for (let i = 1; i <= 10; i++) {
@@ -166,31 +201,27 @@ const Admin: React.FC = () => {
             const dataRows = rows.slice(1).filter(r => r.trim() !== '');
 
             dataRows.forEach((row, index) => {
-                // Handle basic CSV parsing (handles simple commas, assumes no commas inside fields for this basic version)
-                // For production, a robust CSV parser library is recommended.
-                // Fallback: Split by first 5 commas found, remainder is Marks (rough parsing)
-                // Improved split: comma regex or simple split if usage is strict template
-                const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+                // Regex to split by comma ONLY if not inside quotes
+                const cols = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || row.split(',');
                 
-                // Template format: Section,Title,QuestionText,IdealAnswer,Type,Marks
-                // Indices: 0, 1, 2, 3, 4, 5
-                
-                let section = cols[0]?.replace(/^"|"$/g, '').trim();
-                const title = cols[1]?.replace(/^"|"$/g, '').trim() || `Question ${index + 1}`;
-                const qText = cols[2]?.replace(/^"|"$/g, '').trim() || '';
-                const idealAnswer = cols[3]?.replace(/^"|"$/g, '').trim() || '';
-                let type = cols[4]?.replace(/^"|"$/g, '').trim().toLowerCase() || 'text';
-                const marks = parseInt(cols[5]?.replace(/^"|"$/g, '').trim()) || 5;
+                // Clean up quotes
+                const clean = (str: string) => str ? str.replace(/^"|"$/g, '').replace(/""/g, '"').trim() : '';
+
+                let section = clean(cols[0]);
+                const title = clean(cols[1]) || `Question ${index + 1}`;
+                const qText = clean(cols[2]);
+                const idealAnswer = clean(cols[3]);
+                let type = clean(cols[4]).toLowerCase() || 'text';
+                const marks = parseInt(clean(cols[5])) || 5;
 
                 // Enforce the 10/10 Pattern if not explicitly strict in CSV
-                if (index < 10) {
+                if (index < 10 && !section) {
                     section = "Aptitude & Reasoning";
-                    if (!['text'].includes(type)) type = 'text'; // Enforce text for aptitude mostly
-                } else if (index < 20) {
+                    if (type !== 'text') type = 'text'; 
+                } else if (index < 20 && !section) {
                     section = "Technical Assessment";
-                } else {
-                    // Extra questions go to Technical by default
-                    section = section || "Technical Assessment";
+                } else if (!section) {
+                    section = "Technical Assessment";
                 }
 
                 if (qText) {
@@ -200,7 +231,7 @@ const Admin: React.FC = () => {
                         title: title,
                         text: qText,
                         idealAnswerKey: idealAnswer,
-                        codeType: (type === 'python' || type === 'javascript') ? type : 'text',
+                        codeType: type,
                         marks: marks
                     });
                 }
@@ -210,7 +241,7 @@ const Admin: React.FC = () => {
                 setQuestions(newQuestions);
                 alert(`Successfully imported ${newQuestions.length} questions.\n\nStructure:\n- ${newQuestions.filter(q => q.section === 'Aptitude & Reasoning').length} Aptitude\n- ${newQuestions.filter(q => q.section === 'Technical Assessment').length} Technical`);
                 
-                // Clear the file input so the same file can be selected again if needed
+                // Clear the file input
                 if (fileInputRef.current) fileInputRef.current.value = '';
             } else {
                 alert("No valid questions found in CSV.");
@@ -260,9 +291,6 @@ const Admin: React.FC = () => {
   const handleAddOrUpdateQuestion = () => {
     if (!qTitle || !qText) return;
     
-    // Auto-determine section if user is adding manually to keep the pattern
-    // Logic: If < 10 exist, it's Mod 1. Else Mod 2. 
-    // BUT checking existing questions is better.
     let section = 'Technical Assessment';
     const aptitudeCount = questions.filter(q => q.section === 'Aptitude & Reasoning').length;
     
@@ -272,7 +300,7 @@ const Admin: React.FC = () => {
 
     const newQ: Question = {
       id: editingQuestionId || `q-${Date.now()}`,
-      section: section, // Default assignment based on count
+      section: section,
       title: qTitle,
       text: qText,
       codeType: qType,
@@ -363,6 +391,12 @@ const Admin: React.FC = () => {
                             </div>
                             <div className="flex gap-2 self-end">
                                 <button 
+                                    onClick={() => handleExportPaper(p)} 
+                                    className="text-gray-600 hover:text-gray-800 text-xs font-medium border border-gray-300 px-2 rounded bg-white"
+                                >
+                                    Export CSV
+                                </button>
+                                <button 
                                     onClick={() => initPaperEditor(p)} 
                                     className="text-brand-600 hover:text-brand-800 text-xs font-medium"
                                 >
@@ -406,16 +440,14 @@ const Admin: React.FC = () => {
             <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-md">
                 <h4 className="font-bold text-sm text-blue-800 mb-2">Import from CSV (Recommended)</h4>
                 <p className="text-xs text-blue-600 mb-3">
-                    Use this to bulk upload 20 questions. The system enforces: <br/>
-                    • 10 Aptitude & Reasoning Questions <br/>
-                    • 10 Technical Questions
+                    Use this to bulk upload questions.
                 </p>
                 <div className="flex gap-4 items-center">
                     <button 
                         onClick={handleDownloadTemplate}
                         className="text-xs bg-white border border-blue-300 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50"
                     >
-                        Download CSV Template
+                        Download Template
                     </button>
                     <div className="relative">
                         <input 
@@ -453,8 +485,14 @@ const Admin: React.FC = () => {
                             <label className="block text-sm font-medium">Type</label>
                             <select className="w-full border rounded p-2" value={qType} onChange={(e: any) => setQType(e.target.value)}>
                                 <option value="text">Text / Descriptive</option>
-                                <option value="javascript">Code (JS/React)</option>
-                                <option value="python">Code (Python)</option>
+                                <option value="javascript">JavaScript / React</option>
+                                <option value="python">Python</option>
+                                <option value="java">Java</option>
+                                <option value="c">C</option>
+                                <option value="cpp">C++</option>
+                                <option value="csharp">C#</option>
+                                <option value="go">Go</option>
+                                <option value="sql">SQL</option>
                             </select>
                         </div>
                         <div>
@@ -503,7 +541,7 @@ const Admin: React.FC = () => {
                                 </div>
                             );
                         })}
-                        {/* Catch-all for other sections if manually edited incorrectly */}
+                        {/* Catch-all for other sections */}
                         {questions.filter(q => !['Aptitude & Reasoning', 'Technical Assessment'].includes(q.section)).length > 0 && (
                              <div className="bg-gray-100 p-2 rounded">
                                 <h6 className="text-xs font-bold text-gray-600 uppercase mb-2">Other Sections</h6>
@@ -601,14 +639,22 @@ const Admin: React.FC = () => {
         <button onClick={() => setSelectedCandidateId(null)} className="text-brand-600 hover:underline mb-4">&larr; Back to Dashboard</button>
         
         <div className="bg-white p-6 rounded-lg shadow space-y-4">
-          <div className="border-b pb-4">
-            <h2 className="text-2xl font-bold">{candidate?.fullName}</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2 text-sm text-gray-600">
-                <div>Email: {candidate?.email}</div>
-                <div>Paper: {paper?.title || submission?.paperId || 'Unknown'}</div>
-                <div>Salary: {candidate?.currentSalary}</div>
-                <div>Notice: {candidate?.noticePeriod}</div>
+          <div className="border-b pb-4 flex justify-between items-start">
+            <div>
+                <h2 className="text-2xl font-bold">{candidate?.fullName}</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2 text-sm text-gray-600">
+                    <div>Email: {candidate?.email}</div>
+                    <div>Paper: {paper?.title || submission?.paperId || 'Unknown'}</div>
+                    <div>Salary: {candidate?.currentSalary}</div>
+                    <div>Notice: {candidate?.noticePeriod}</div>
+                </div>
             </div>
+            <button 
+                onClick={() => candidate && handleResetSubmission(candidate.id, candidate.fullName)}
+                className="text-red-600 hover:text-red-800 text-sm border border-red-200 bg-red-50 px-3 py-1 rounded"
+            >
+                Reset Submission
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -754,10 +800,16 @@ const Admin: React.FC = () => {
                         View
                     </button>
                     <button 
+                        onClick={() => handleResetSubmission(candidate.id, candidate.fullName)}
+                        className="text-orange-600 hover:text-orange-900 mr-3"
+                    >
+                        Reset
+                    </button>
+                    <button 
                         onClick={() => handleDeleteCandidate(candidate.id, candidate.fullName)}
                         className="text-red-600 hover:text-red-900"
                     >
-                        Delete
+                        Delete User
                     </button>
                   </td>
                 </tr>

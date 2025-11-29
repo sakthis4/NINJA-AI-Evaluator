@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Candidate, ExamSubmission, EvaluationResult, QuestionPaper, Question, ExamAssignment } from '../types';
 import { db } from '../services/db';
 import { evaluateExam } from '../services/gemini';
@@ -36,6 +36,7 @@ type AdminTab = 'SUBMISSIONS' | 'MANAGE_EXAMS' | 'ASSIGN_EXAMS';
 
 const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('SUBMISSIONS');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Data State
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -87,8 +88,20 @@ const Admin: React.FC = () => {
   }, []);
 
   const handleDeleteCandidate = async (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete user ${name}? This action cannot be undone.`)) {
+    if (window.confirm(`Are you sure you want to delete user ${name}? This action cannot be undone and will remove their assignment and submission data.`)) {
         await db.deleteCandidate(id);
+        await fetchData();
+    }
+  };
+
+  const handleDeletePaper = async (id: string, title: string) => {
+    if (window.confirm(`Are you sure you want to delete the exam paper "${title}"? This action cannot be undone.`)) {
+        await db.deleteQuestionPaper(id);
+        
+        // If we are currently editing this paper, reset the editor
+        if (editingPaperId === id) {
+            initPaperEditor();
+        }
         await fetchData();
     }
   };
@@ -110,6 +123,104 @@ const Admin: React.FC = () => {
     } finally {
       setEvaluatingId(null);
     }
+  };
+
+  // --- CSV Import Logic ---
+
+  const handleDownloadTemplate = () => {
+    // Create a CSV template with 20 rows: 10 Aptitude + 10 Technical
+    let csvContent = "data:text/csv;charset=utf-8,Section,Title,QuestionText,IdealAnswer,Type(text/python/javascript),Marks\n";
+    
+    // First 10: Aptitude
+    for (let i = 1; i <= 10; i++) {
+        csvContent += `Aptitude & Reasoning,Aptitude Q${i},Enter question text here...,Enter answer key...,text,5\n`;
+    }
+    // Next 10: Technical
+    for (let i = 1; i <= 10; i++) {
+        csvContent += `Technical Assessment,Technical Q${i},Enter question text here...,Enter answer key...,text,10\n`;
+    }
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "exam_template_20q.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const text = e.target?.result as string;
+        if (!text) return;
+
+        try {
+            const rows = text.split('\n');
+            const newQuestions: Question[] = [];
+            
+            // Skip header (index 0) and filter empty lines
+            const dataRows = rows.slice(1).filter(r => r.trim() !== '');
+
+            dataRows.forEach((row, index) => {
+                // Handle basic CSV parsing (handles simple commas, assumes no commas inside fields for this basic version)
+                // For production, a robust CSV parser library is recommended.
+                // Fallback: Split by first 5 commas found, remainder is Marks (rough parsing)
+                // Improved split: comma regex or simple split if usage is strict template
+                const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+                
+                // Template format: Section,Title,QuestionText,IdealAnswer,Type,Marks
+                // Indices: 0, 1, 2, 3, 4, 5
+                
+                let section = cols[0]?.replace(/^"|"$/g, '').trim();
+                const title = cols[1]?.replace(/^"|"$/g, '').trim() || `Question ${index + 1}`;
+                const qText = cols[2]?.replace(/^"|"$/g, '').trim() || '';
+                const idealAnswer = cols[3]?.replace(/^"|"$/g, '').trim() || '';
+                let type = cols[4]?.replace(/^"|"$/g, '').trim().toLowerCase() || 'text';
+                const marks = parseInt(cols[5]?.replace(/^"|"$/g, '').trim()) || 5;
+
+                // Enforce the 10/10 Pattern if not explicitly strict in CSV
+                if (index < 10) {
+                    section = "Aptitude & Reasoning";
+                    if (!['text'].includes(type)) type = 'text'; // Enforce text for aptitude mostly
+                } else if (index < 20) {
+                    section = "Technical Assessment";
+                } else {
+                    // Extra questions go to Technical by default
+                    section = section || "Technical Assessment";
+                }
+
+                if (qText) {
+                    newQuestions.push({
+                        id: `q-csv-${Date.now()}-${index}`,
+                        section: section,
+                        title: title,
+                        text: qText,
+                        idealAnswerKey: idealAnswer,
+                        codeType: (type === 'python' || type === 'javascript') ? type : 'text',
+                        marks: marks
+                    });
+                }
+            });
+
+            if (newQuestions.length > 0) {
+                setQuestions(newQuestions);
+                alert(`Successfully imported ${newQuestions.length} questions.\n\nStructure:\n- ${newQuestions.filter(q => q.section === 'Aptitude & Reasoning').length} Aptitude\n- ${newQuestions.filter(q => q.section === 'Technical Assessment').length} Technical`);
+                
+                // Clear the file input so the same file can be selected again if needed
+                if (fileInputRef.current) fileInputRef.current.value = '';
+            } else {
+                alert("No valid questions found in CSV.");
+            }
+        } catch (err) {
+            console.error("CSV Parse Error", err);
+            alert("Failed to parse CSV. Please ensure it matches the template format.");
+        }
+    };
+    reader.readAsText(file);
   };
 
   // --- Paper Editor Logic ---
@@ -149,9 +260,19 @@ const Admin: React.FC = () => {
   const handleAddOrUpdateQuestion = () => {
     if (!qTitle || !qText) return;
     
+    // Auto-determine section if user is adding manually to keep the pattern
+    // Logic: If < 10 exist, it's Mod 1. Else Mod 2. 
+    // BUT checking existing questions is better.
+    let section = 'Technical Assessment';
+    const aptitudeCount = questions.filter(q => q.section === 'Aptitude & Reasoning').length;
+    
+    if (aptitudeCount < 10) {
+        section = 'Aptitude & Reasoning';
+    }
+
     const newQ: Question = {
       id: editingQuestionId || `q-${Date.now()}`,
-      section: 'Custom Section',
+      section: section, // Default assignment based on count
       title: qTitle,
       text: qText,
       codeType: qType,
@@ -235,17 +356,25 @@ const Admin: React.FC = () => {
             <ul className="space-y-2">
                 {papers.map(p => (
                     <li key={p.id} className="bg-gray-50 p-3 rounded border hover:bg-gray-100">
-                        <div className="flex justify-between items-start">
+                        <div className="flex flex-col gap-2">
                             <div>
                                 <div className="font-medium text-sm">{p.title}</div>
                                 <div className="text-xs text-gray-500">{p.questions.length} Qs • {p.duration || 60} mins</div>
                             </div>
-                            <button 
-                                onClick={() => initPaperEditor(p)} 
-                                className="text-brand-600 hover:text-brand-800 text-xs font-medium"
-                            >
-                                Edit
-                            </button>
+                            <div className="flex gap-2 self-end">
+                                <button 
+                                    onClick={() => initPaperEditor(p)} 
+                                    className="text-brand-600 hover:text-brand-800 text-xs font-medium"
+                                >
+                                    Edit
+                                </button>
+                                <button 
+                                    onClick={() => handleDeletePaper(p.id, p.title)}
+                                    className="text-red-600 hover:text-red-800 text-xs font-medium"
+                                >
+                                    Delete
+                                </button>
+                            </div>
                         </div>
                     </li>
                 ))}
@@ -273,8 +402,43 @@ const Admin: React.FC = () => {
                 </div>
             </div>
 
+            {/* CSV Import Actions */}
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-md">
+                <h4 className="font-bold text-sm text-blue-800 mb-2">Import from CSV (Recommended)</h4>
+                <p className="text-xs text-blue-600 mb-3">
+                    Use this to bulk upload 20 questions. The system enforces: <br/>
+                    • 10 Aptitude & Reasoning Questions <br/>
+                    • 10 Technical Questions
+                </p>
+                <div className="flex gap-4 items-center">
+                    <button 
+                        onClick={handleDownloadTemplate}
+                        className="text-xs bg-white border border-blue-300 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50"
+                    >
+                        Download CSV Template
+                    </button>
+                    <div className="relative">
+                        <input 
+                            type="file" 
+                            accept=".csv"
+                            ref={fileInputRef}
+                            onChange={handleImportCSV}
+                            className="hidden"
+                            id="csv-upload"
+                        />
+                        <label 
+                            htmlFor="csv-upload" 
+                            className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded cursor-pointer hover:bg-blue-700 flex items-center gap-2"
+                        >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            Upload & Import
+                        </label>
+                    </div>
+                </div>
+            </div>
+
             <div className="border-t pt-6 bg-gray-50 -mx-6 px-6 pb-6">
-                <h4 className="font-bold mb-4">{editingQuestionId ? 'Edit Question' : 'Add Question'}</h4>
+                <h4 className="font-bold mb-4">{editingQuestionId ? 'Edit Question' : 'Add Question Manually'}</h4>
                 <div className="bg-white p-4 rounded border mb-4 space-y-4 shadow-sm">
                     <div>
                         <label className="block text-sm font-medium">Question Title</label>
@@ -317,17 +481,43 @@ const Admin: React.FC = () => {
                 <div className="mb-6">
                     <h5 className="font-bold text-sm text-gray-700 mb-2">Questions in Paper ({questions.length}):</h5>
                     {questions.length === 0 && <p className="text-gray-500 text-xs italic">No questions added yet.</p>}
-                    <ul className="space-y-2">
-                        {questions.map((q, i) => (
-                            <li key={i} className="bg-white p-2 rounded border flex justify-between items-center text-sm">
-                                <span className="truncate flex-1 font-medium">{q.title} <span className="text-gray-500 font-normal">({q.marks} marks)</span></span>
-                                <div className="flex gap-2 ml-2">
-                                    <button onClick={() => loadQuestionForEdit(q)} className="text-blue-600 hover:text-blue-800 text-xs">Edit</button>
-                                    <button onClick={() => removeQuestion(q.id)} className="text-red-600 hover:text-red-800 text-xs">Remove</button>
+                    <div className="space-y-4">
+                        {/* Group Visualization */}
+                        {['Aptitude & Reasoning', 'Technical Assessment'].map(section => {
+                            const sectionQuestions = questions.filter(q => q.section === section);
+                            if (sectionQuestions.length === 0) return null;
+                            return (
+                                <div key={section} className="bg-gray-100 p-2 rounded">
+                                    <h6 className="text-xs font-bold text-gray-600 uppercase mb-2">{section} ({sectionQuestions.length})</h6>
+                                    <ul className="space-y-2">
+                                        {sectionQuestions.map((q, i) => (
+                                            <li key={q.id} className="bg-white p-2 rounded border flex justify-between items-center text-sm">
+                                                <span className="truncate flex-1 font-medium">{q.title} <span className="text-gray-500 font-normal">({q.marks} marks)</span></span>
+                                                <div className="flex gap-2 ml-2">
+                                                    <button onClick={() => loadQuestionForEdit(q)} className="text-blue-600 hover:text-blue-800 text-xs">Edit</button>
+                                                    <button onClick={() => removeQuestion(q.id)} className="text-red-600 hover:text-red-800 text-xs">Remove</button>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
-                            </li>
-                        ))}
-                    </ul>
+                            );
+                        })}
+                        {/* Catch-all for other sections if manually edited incorrectly */}
+                        {questions.filter(q => !['Aptitude & Reasoning', 'Technical Assessment'].includes(q.section)).length > 0 && (
+                             <div className="bg-gray-100 p-2 rounded">
+                                <h6 className="text-xs font-bold text-gray-600 uppercase mb-2">Other Sections</h6>
+                                <ul className="space-y-2">
+                                    {questions.filter(q => !['Aptitude & Reasoning', 'Technical Assessment'].includes(q.section)).map(q => (
+                                        <li key={q.id} className="bg-white p-2 rounded border flex justify-between items-center text-sm">
+                                            <span className="truncate flex-1 font-medium">{q.title}</span>
+                                            <button onClick={() => removeQuestion(q.id)} className="text-red-600 hover:text-red-800 text-xs ml-2">Remove</button>
+                                        </li>
+                                    ))}
+                                </ul>
+                             </div>
+                        )}
+                    </div>
                 </div>
 
                 <button onClick={handleSavePaper} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-bold w-full">

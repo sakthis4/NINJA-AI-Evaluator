@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Question, ProctorLog, ExamSubmission } from '../types';
 import { EXAM_CONTEXT } from '../constants';
 import Proctoring from '../components/Proctoring';
@@ -199,6 +199,15 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
       return 'text-gray-800 font-bold';
   };
 
+  // Group questions by section
+  const groupedQuestions = useMemo(() => {
+    return questions.reduce((acc, q) => {
+      if (!acc[q.section]) acc[q.section] = [];
+      acc[q.section].push(q);
+      return acc;
+    }, {} as Record<string, Question[]>);
+  }, [questions]);
+
   if (isLoading) {
       return <div className="p-8 text-center">Loading Exam Paper...</div>;
   }
@@ -237,37 +246,45 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
         </div>
       </div>
 
-      <div className="space-y-6">
-        {questions.map((q) => (
-          <div key={q.id} className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <span className="inline-block px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-100 rounded mb-2">
-                  {q.section}
-                </span>
-                <h3 className="text-lg font-bold text-gray-900">
-                    {q.title} 
-                    <span className="ml-2 text-sm font-normal text-gray-500">({q.marks || 10} marks)</span>
-                </h3>
-              </div>
+      <div className="space-y-10">
+        {Object.entries(groupedQuestions).map(([sectionName, sectionQs]) => (
+          <div key={sectionName}>
+            <div className="flex items-center gap-4 mb-4">
+               <h2 className="text-2xl font-bold text-gray-800">{sectionName}</h2>
+               <div className="h-1 flex-grow bg-gray-200 rounded"></div>
             </div>
-            <p className="text-gray-700 mb-4 whitespace-pre-line">{q.text}</p>
             
-            {(q.codeType === 'javascript' || q.codeType === 'python') ? (
-               <CodeRunner 
-                 code={answers[q.id] || ''} 
-                 onChange={(val) => handleAnswerChange(q.id, val)}
-                 language={q.codeType}
-               />
-            ) : (
-              <textarea
-                className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-sans text-base leading-relaxed text-gray-800 resize-y"
-                placeholder="Type your answer here..."
-                value={answers[q.id] || ''}
-                onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                spellCheck={false}
-              />
-            )}
+            <div className="space-y-6">
+              {sectionQs.map((q) => (
+                <div key={q.id} className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">
+                          {q.title} 
+                          <span className="ml-2 text-sm font-normal text-gray-500">({q.marks || 10} marks)</span>
+                      </h3>
+                    </div>
+                  </div>
+                  <p className="text-gray-700 mb-4 whitespace-pre-line">{q.text}</p>
+                  
+                  {(q.codeType === 'javascript' || q.codeType === 'python') ? (
+                    <CodeRunner 
+                      code={answers[q.id] || ''} 
+                      onChange={(val) => handleAnswerChange(q.id, val)}
+                      language={q.codeType}
+                    />
+                  ) : (
+                    <textarea
+                      className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-sans text-base leading-relaxed text-gray-800 resize-y"
+                      placeholder="Type your answer here..."
+                      value={answers[q.id] || ''}
+                      onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                      spellCheck={false}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>

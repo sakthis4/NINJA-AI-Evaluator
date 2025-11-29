@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppRoute, Candidate } from './types';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -7,11 +7,26 @@ import Exam from './pages/Exam';
 import Admin from './pages/Admin';
 import AdminLogin from './pages/AdminLogin';
 import ThankYou from './pages/ThankYou';
+import { db } from './services/db';
 
 const App: React.FC = () => {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(AppRoute.LOGIN);
   const [currentUser, setCurrentUser] = useState<Candidate | undefined>(undefined);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isAppLoading, setIsAppLoading] = useState(true);
+
+  useEffect(() => {
+    const initApp = async () => {
+      try {
+        await db.initialize();
+      } catch (e: any) {
+        console.error("Initialization warning:", e);
+      } finally {
+        setIsAppLoading(false);
+      }
+    };
+    initApp();
+  }, []);
 
   const handleAdminClick = () => {
     setCurrentRoute(AppRoute.ADMIN_LOGIN);
@@ -27,7 +42,6 @@ const App: React.FC = () => {
   };
 
   const handleRegister = (candidate: Candidate) => {
-    // Set user and move to Instructions page instead of Exam directly
     setCurrentUser(candidate);
     setCurrentRoute(AppRoute.INSTRUCTIONS);
   };
@@ -43,7 +57,6 @@ const App: React.FC = () => {
   };
 
   const handleExamFinish = () => {
-    // Assessment finished, go to thank you page
     setCurrentRoute(AppRoute.THANK_YOU);
   };
 
@@ -66,6 +79,17 @@ const App: React.FC = () => {
         return <div>Page not found</div>;
     }
   };
+
+  if (isAppLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-700">Starting System...</h2>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Layout 

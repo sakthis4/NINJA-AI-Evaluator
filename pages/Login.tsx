@@ -49,6 +49,19 @@ const Login: React.FC<LoginProps> = ({ onRegister, onAdminClick }) => {
     }
   };
 
+  const handleDemoLogin = async (profile: 'strong' | 'average') => {
+    setIsLoading(true);
+    try {
+        const candidate = await db.provisionDemoCandidate(profile);
+        onRegister(candidate);
+    } catch (e) {
+        console.error(e);
+        setError("Could not create demo user.");
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
     setError('');
@@ -144,6 +157,31 @@ const Login: React.FC<LoginProps> = ({ onRegister, onAdminClick }) => {
           </button>
         </div>
       </form>
+
+      {/* Demo Access Section */}
+      <div className="bg-blue-50 px-6 py-4 border-t border-blue-100">
+        <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wide mb-3 text-center">
+            🚀 Quick Demo Access (Pre-filled Answers)
+        </h3>
+        <div className="grid grid-cols-2 gap-3">
+            <button 
+                type="button"
+                onClick={() => handleDemoLogin('strong')}
+                disabled={isLoading}
+                className="text-xs bg-white border border-blue-300 text-blue-700 py-2 rounded hover:bg-blue-100 font-medium"
+            >
+                Log in as Expert
+            </button>
+            <button 
+                type="button"
+                onClick={() => handleDemoLogin('average')}
+                disabled={isLoading}
+                className="text-xs bg-white border border-gray-300 text-gray-700 py-2 rounded hover:bg-gray-100 font-medium"
+            >
+                Log in as Average
+            </button>
+        </div>
+      </div>
 
       <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex justify-center">
         <button 

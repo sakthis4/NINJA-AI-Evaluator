@@ -7,10 +7,24 @@ declare const Prism: any;
 interface CodeRunnerProps {
   code: string;
   onChange: (newCode: string) => void;
-  language: string; // Updated to generic string
+  language: string; // This is the DEFAULT language
 }
 
+const SUPPORTED_LANGUAGES = [
+    { value: 'javascript', label: 'JavaScript' },
+    { value: 'python', label: 'Python' },
+    { value: 'java', label: 'Java' },
+    { value: 'cpp', label: 'C++' },
+    { value: 'csharp', label: 'C#' },
+    { value: 'go', label: 'Go' },
+    { value: 'rust', label: 'Rust' },
+    { value: 'sql', label: 'SQL' }
+];
+
 const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => {
+  // Allow user to change language. Default to prop provided.
+  const [selectedLanguage, setSelectedLanguage] = useState(language);
+  
   const [output, setOutput] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false); // For AI validation
@@ -19,10 +33,15 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
   const preRef = useRef<HTMLPreElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Handle Syntax Highlighting for Input
+  // Sync state if prop changes (e.g. next question)
+  useEffect(() => {
+      setSelectedLanguage(language);
+  }, [language]);
+
+  // Handle Syntax Highlighting for Input based on selectedLanguage
   useEffect(() => {
     if (typeof Prism !== 'undefined') {
-      let langClass = language.toLowerCase();
+      let langClass = selectedLanguage.toLowerCase();
       // Map basic names to Prism classes if needed
       if (langClass === 'c++') langClass = 'cpp';
       if (langClass === 'c#') langClass = 'csharp';
@@ -40,7 +59,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
       // Fallback if not a code language or Prism missing
       setHighlightedCode(code.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
     }
-  }, [code, language]);
+  }, [code, selectedLanguage]);
 
   // Sync scroll between textarea and pre
   const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
@@ -51,12 +70,9 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
   };
 
   const handleRunCode = async () => {
-    // If it's purely Javascript, we can still run it locally for speed, 
-    // OR we can send everything to AI to be consistent. 
-    // Given the prompt "coding window should support all languages", AI is safer for compilation/output consistency.
-    // However, JS 'new Function' is very fast for simple logic. Let's keep local for JS, AI for others.
-    
-    if (language === 'javascript') {
+    // If user selected JS, we can run locally. 
+    // Otherwise use AI executor.
+    if (selectedLanguage === 'javascript') {
         runJsLocally();
     } else {
         runWithAI();
@@ -68,12 +84,12 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
     setOutput(null);
     setError(null);
     try {
-      const result = await executeCodeWithAI(code, language);
+      const result = await executeCodeWithAI(code, selectedLanguage);
       if (result.type === 'error') {
         setError(result.content);
       } else { // 'output'
         const outputContent = result.content.trim() === '' 
-          ? `// ${language} code executed successfully with no output.`
+          ? `// ${selectedLanguage} code executed successfully with no output.`
           : result.content;
         setOutput(outputContent);
       }
@@ -139,18 +155,18 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
   };
 
   const getFileName = () => {
-      if (language === 'javascript') return 'main.js';
-      if (language === 'python') return 'script.py';
-      if (language === 'java') return 'Main.java';
-      if (language === 'cpp') return 'main.cpp';
-      if (language === 'csharp') return 'Program.cs';
-      if (language === 'sql') return 'query.sql';
-      return `script.${language.slice(0, 3)}`;
+      if (selectedLanguage === 'javascript') return 'main.js';
+      if (selectedLanguage === 'python') return 'script.py';
+      if (selectedLanguage === 'java') return 'Main.java';
+      if (selectedLanguage === 'cpp') return 'main.cpp';
+      if (selectedLanguage === 'csharp') return 'Program.cs';
+      if (selectedLanguage === 'sql') return 'query.sql';
+      return `script.${selectedLanguage.slice(0, 3)}`;
   }
 
   const getButtonContent = () => {
-    if (language !== 'javascript') {
-      return isChecking ? 'Running...' : `Run (${language})`;
+    if (selectedLanguage !== 'javascript') {
+      return isChecking ? 'Running...' : `Run (${selectedLanguage})`;
     }
     return 'Run (JS)';
   };
@@ -159,11 +175,25 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
     <div className="border border-gray-300 rounded-md overflow-hidden bg-[#2d2d2d] text-white shadow-sm flex flex-col h-[500px]">
       {/* Toolbar */}
       <div className="flex justify-between items-center bg-[#1f1f1f] px-4 py-2 border-b border-gray-700 shrink-0">
-        <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-red-500"></span>
-            <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
-            <span className="w-3 h-3 rounded-full bg-green-500"></span>
-            <span className="ml-2 text-xs font-mono text-gray-400 uppercase tracking-wider">
+        <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
+                <span className="w-3 h-3 rounded-full bg-green-500"></span>
+            </div>
+            
+            {/* Language Selector */}
+            <select 
+                value={selectedLanguage} 
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="bg-[#2d2d2d] text-gray-300 text-xs border border-gray-600 rounded px-2 py-1 outline-none focus:border-brand-500"
+            >
+                {SUPPORTED_LANGUAGES.map(lang => (
+                    <option key={lang.value} value={lang.value}>{lang.label}</option>
+                ))}
+            </select>
+
+            <span className="ml-2 text-xs font-mono text-gray-400 uppercase tracking-wider hidden md:inline">
                 {getFileName()}
             </span>
         </div>
@@ -172,7 +202,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
           onClick={handleRunCode}
           type="button"
           disabled={isChecking}
-          title={`Execute ${language} code`}
+          title={`Execute ${selectedLanguage} code`}
           className="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
         >
           <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
@@ -191,7 +221,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
             aria-hidden="true"
           >
             <code 
-              className={`language-${language === 'c++' ? 'cpp' : language}`}
+              className={`language-${selectedLanguage === 'c++' ? 'cpp' : selectedLanguage}`}
               dangerouslySetInnerHTML={{ __html: highlightedCode + '<br/>' }} 
             />
           </pre>
@@ -203,7 +233,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
             onScroll={handleScroll}
             className="absolute inset-0 w-full h-full p-4 font-mono text-sm leading-6 bg-transparent text-transparent caret-white resize-none focus:outline-none overflow-auto"
             style={{ fontFamily: '"Fira Code", "Consolas", monospace' }}
-            placeholder={`// Write your ${language} solution here...`}
+            placeholder={`// Write your ${selectedLanguage} solution here...`}
             spellCheck={false}
             autoCapitalize="off"
             autoComplete="off"
@@ -229,7 +259,7 @@ const CodeRunner: React.FC<CodeRunnerProps> = ({ code, onChange, language }) => 
                   <pre 
                     className="whitespace-pre-wrap text-gray-300"
                     dangerouslySetInnerHTML={{ 
-                        __html: output ? (language === 'javascript' ? getHighlightedOutput(output) : output) : '' 
+                        __html: output ? (selectedLanguage === 'javascript' ? getHighlightedOutput(output) : output) : '' 
                     }} 
                   />
                 )}

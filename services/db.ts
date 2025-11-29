@@ -267,6 +267,16 @@ class DatabaseService {
     return snapshot.docs.map(d => d.data() as ExamAssignment);
   }
 
+  async deleteAssignment(id: string): Promise<void> {
+    if (this.useLocalStorage) {
+        let assignments = this.getLS<ExamAssignment>(LS_KEYS.ASSIGNMENTS);
+        assignments = assignments.filter(a => a.id !== id);
+        this.setLS(LS_KEYS.ASSIGNMENTS, assignments);
+        return;
+    }
+    await deleteDoc(doc(this.db, COLLECTIONS.ASSIGNMENTS, id));
+  }
+
   // --- Papers ---
 
   async createQuestionPaper(paper: QuestionPaper): Promise<void> {

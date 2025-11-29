@@ -55,13 +55,17 @@ const Admin: React.FC = () => {
   const [paperDuration, setPaperDuration] = useState(60);
   const [questions, setQuestions] = useState<Question[]>([]);
   
-  // New/Edit Question State
-  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  // Question Navigation State
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1); // -1 means no question selected (or new)
+
+  // Question Form State (Current Question being edited)
+  const [qId, setQId] = useState('');
   const [qTitle, setQTitle] = useState('');
   const [qText, setQText] = useState('');
   const [qType, setQType] = useState<string>('text');
   const [qMarks, setQMarks] = useState('10');
   const [qKey, setQKey] = useState('');
+  const [qSection, setQSection] = useState('Technical Assessment');
 
   // Assign Form State
   const [assignEmail, setAssignEmail] = useState('');
@@ -111,6 +115,13 @@ const Admin: React.FC = () => {
         if (editingPaperId === id) {
             initPaperEditor();
         }
+        await fetchData();
+    }
+  };
+  
+  const handleDeleteAssignment = async (id: string, email: string) => {
+    if (window.confirm(`Are you sure you want to delete the assignment for ${email}?`)) {
+        await db.deleteAssignment(id);
         await fetchData();
     }
   };
@@ -241,6 +252,9 @@ const Admin: React.FC = () => {
                 setQuestions(newQuestions);
                 alert(`Successfully imported ${newQuestions.length} questions.\n\nStructure:\n- ${newQuestions.filter(q => q.section === 'Aptitude & Reasoning').length} Aptitude\n- ${newQuestions.filter(q => q.section === 'Technical Assessment').length} Technical`);
                 
+                // Set index to 0 to start editing
+                if (newQuestions.length > 0) setCurrentQuestionIndex(0);
+                
                 // Clear the file input
                 if (fileInputRef.current) fileInputRef.current.value = '';
             } else {
@@ -263,76 +277,170 @@ const Admin: React.FC = () => {
         setPaperDesc(paper.description);
         setPaperDuration(paper.duration || 60);
         setQuestions([...paper.questions]);
+        if (paper.questions.length > 0) {
+            loadQuestionIntoForm(paper.questions[0], 0);
+        } else {
+            setCurrentQuestionIndex(-1); // New Q state
+            clearQuestionForm();
+        }
     } else {
         setEditingPaperId(null);
         setPaperTitle('');
         setPaperDesc('');
         setPaperDuration(60);
         setQuestions([]);
+        setCurrentQuestionIndex(-1);
+        clearQuestionForm();
     }
-    // Reset question form
-    clearQuestionForm();
   };
 
   const clearQuestionForm = () => {
-    setEditingQuestionId(null);
+    setQId(`q-${Date.now()}`);
     setQTitle(''); setQText(''); setQKey(''); setQType('text'); setQMarks('10');
+    setQSection('Technical Assessment');
   };
 
-  const loadQuestionForEdit = (q: Question) => {
-    setEditingQuestionId(q.id);
+  const loadQuestionIntoForm = (q: Question, index: number) => {
+    setCurrentQuestionIndex(index);
+    setQId(q.id);
     setQTitle(q.title);
     setQText(q.text);
     setQType(q.codeType || 'text');
     setQMarks(String(q.marks || 10));
     setQKey(q.idealAnswerKey);
+    setQSection(q.section);
   };
 
-  const handleAddOrUpdateQuestion = () => {
-    if (!qTitle || !qText) return;
-    
-    let section = 'Technical Assessment';
-    const aptitudeCount = questions.filter(q => q.section === 'Aptitude & Reasoning').length;
-    
-    if (aptitudeCount < 10) {
-        section = 'Aptitude & Reasoning';
-    }
+  // Saves the CURRENT form data into the questions array at the current index
+  const commitCurrentQuestion = () => {
+      // Validate
+      if (!qTitle.trim() || !qText.trim()) return false;
 
-    const newQ: Question = {
-      id: editingQuestionId || `q-${Date.now()}`,
-      section: section,
-      title: qTitle,
-      text: qText,
-      codeType: qType,
-      marks: parseInt(qMarks) || 10,
-      idealAnswerKey: qKey
-    };
+      const newQ: Question = {
+          id: qId,
+          section: qSection,
+          title: qTitle,
+          text: qText,
+          codeType: qType,
+          marks: parseInt(qMarks) || 10,
+          idealAnswerKey: qKey
+      };
 
-    if (editingQuestionId) {
-        // Update existing
-        setQuestions(questions.map(q => q.id === editingQuestionId ? newQ : q));
-    } else {
-        // Add new
-        setQuestions([...questions, newQ]);
-    }
-    clearQuestionForm();
+      const updatedQuestions = [...questions];
+      
+      if (currentQuestionIndex === -1 || currentQuestionIndex >= questions.length) {
+          // It's a new question
+          updatedQuestions.push(newQ);
+          setQuestions(updatedQuestions);
+          setCurrentQuestionIndex(updatedQuestions.length - 1); // Move to this new index
+      } else {
+          // Update existing
+          updatedQuestions[currentQuestionIndex] = newQ;
+          setQuestions(updatedQuestions);
+      }
+      return true;
   };
 
-  const removeQuestion = (qId: string) => {
-      setQuestions(questions.filter(q => q.id !== qId));
+  const handleNextQuestion = () => {
+      if (!commitCurrentQuestion()) {
+          alert("Please fill in the title and text before proceeding.");
+          return;
+      }
+      
+      const nextIndex = currentQuestionIndex + 1;
+      if (nextIndex < questions.length) {
+          loadQuestionIntoForm(questions[nextIndex], nextIndex);
+      } else {
+          // Move to "Add New" state
+          setCurrentQuestionIndex(-1);
+          clearQuestionForm();
+      }
+  };
+
+  const handlePrevQuestion = () => {
+      commitCurrentQuestion(); // Save progress on current
+      const prevIndex = currentQuestionIndex === -1 ? questions.length - 1 : currentQuestionIndex - 1;
+      if (prevIndex >= 0) {
+          loadQuestionIntoForm(questions[prevIndex], prevIndex);
+      }
+  };
+
+  const handleJumpToQuestion = (index: number) => {
+      commitCurrentQuestion();
+      if (index >= 0 && index < questions.length) {
+          loadQuestionIntoForm(questions[index], index);
+      }
+  };
+  
+  const handleAddNewQuestion = () => {
+      commitCurrentQuestion();
+      setCurrentQuestionIndex(-1);
+      clearQuestionForm();
+  };
+
+  const handleRemoveCurrentQuestion = () => {
+      if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
+          const newQs = questions.filter((_, i) => i !== currentQuestionIndex);
+          setQuestions(newQs);
+          
+          if (newQs.length > 0) {
+              const newIndex = Math.min(currentQuestionIndex, newQs.length - 1);
+              loadQuestionIntoForm(newQs[newIndex], newIndex);
+          } else {
+              setCurrentQuestionIndex(-1);
+              clearQuestionForm();
+          }
+      }
   };
 
   const handleSavePaper = async () => {
-    if (!paperTitle || questions.length === 0) {
-        alert("Please provide a title and at least one question.");
+    // Commit any unsaved changes in the form
+    if (qTitle.trim() && qText.trim()) {
+        commitCurrentQuestion();
+    }
+    
+    // Slight delay to ensure state update if commit happened
+    await new Promise(r => setTimeout(r, 100));
+    
+    // We can't rely on 'questions' state immediately if we just called setQuestions.
+    // However, in React batching, it might be okay. To be safe, re-read form if valid.
+    
+    // Re-verify length
+    if (!paperTitle) {
+        alert("Please provide a paper title.");
         return;
     }
     
+    // Construct final object
+    // Note: Use current state 'questions'. If user just typed in form but didn't click "Next" or "Add", 
+    // the very last edit might be pending.
+    // To solve this, let's explicitly push the current form if it looks valid and isn't saved.
+    let finalQuestions = [...questions];
+    
+    // If the form has valid data and we are in "New" mode (-1), add it.
+    // If we are in Edit mode, update it.
+    if (qTitle.trim() && qText.trim()) {
+        const currentFormQ: Question = {
+            id: qId, section: qSection, title: qTitle, text: qText, codeType: qType, marks: parseInt(qMarks) || 10, idealAnswerKey: qKey
+        };
+        if (currentQuestionIndex === -1) {
+             // Check if this exact ID is already in (unlikely due to timestamp)
+             finalQuestions.push(currentFormQ);
+        } else {
+             finalQuestions[currentQuestionIndex] = currentFormQ;
+        }
+    }
+    
+    if (finalQuestions.length === 0) {
+        alert("Please add at least one question.");
+        return;
+    }
+
     const paper: QuestionPaper = {
       id: editingPaperId || `paper-${Date.now()}`,
       title: paperTitle,
       description: paperDesc,
-      questions: questions,
+      questions: finalQuestions,
       duration: paperDuration,
       createdAt: editingPaperId ? (papers.find(p => p.id === editingPaperId)?.createdAt || Date.now()) : Date.now()
     };
@@ -369,9 +477,9 @@ const Admin: React.FC = () => {
   // --- Subcomponents for Cleanliness ---
 
   const renderManageExams = () => (
-    <div className="grid md:grid-cols-3 gap-6">
+    <div className="grid md:grid-cols-4 gap-6">
         {/* Left Col: List of Papers */}
-        <div className="md:col-span-1 bg-white rounded-lg shadow p-4 h-fit">
+        <div className="md:col-span-1 bg-white rounded-lg shadow p-4 h-fit max-h-screen overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-lg">Exam Papers</h3>
                 <button 
@@ -383,27 +491,21 @@ const Admin: React.FC = () => {
             </div>
             <ul className="space-y-2">
                 {papers.map(p => (
-                    <li key={p.id} className="bg-gray-50 p-3 rounded border hover:bg-gray-100">
+                    <li key={p.id} className={`p-3 rounded border cursor-pointer transition-colors ${editingPaperId === p.id ? 'bg-brand-50 border-brand-500' : 'bg-gray-50 hover:bg-gray-100'}`}>
                         <div className="flex flex-col gap-2">
-                            <div>
+                            <div onClick={() => initPaperEditor(p)}>
                                 <div className="font-medium text-sm">{p.title}</div>
                                 <div className="text-xs text-gray-500">{p.questions.length} Qs • {p.duration || 60} mins</div>
                             </div>
                             <div className="flex gap-2 self-end">
                                 <button 
-                                    onClick={() => handleExportPaper(p)} 
+                                    onClick={(e) => { e.stopPropagation(); handleExportPaper(p); }} 
                                     className="text-gray-600 hover:text-gray-800 text-xs font-medium border border-gray-300 px-2 rounded bg-white"
                                 >
-                                    Export CSV
+                                    Export
                                 </button>
                                 <button 
-                                    onClick={() => initPaperEditor(p)} 
-                                    className="text-brand-600 hover:text-brand-800 text-xs font-medium"
-                                >
-                                    Edit
-                                </button>
-                                <button 
-                                    onClick={() => handleDeletePaper(p.id, p.title)}
+                                    onClick={(e) => { e.stopPropagation(); handleDeletePaper(p.id, p.title); }}
                                     className="text-red-600 hover:text-red-800 text-xs font-medium"
                                 >
                                     Delete
@@ -416,151 +518,151 @@ const Admin: React.FC = () => {
         </div>
 
         {/* Right Col: Editor */}
-        <div className="md:col-span-2 bg-white rounded-lg shadow p-6">
-            <h3 className="text-xl font-bold mb-6">
-                {editingPaperId ? 'Edit Exam Paper' : 'Create New Exam Paper'}
+        <div className="md:col-span-3 bg-white rounded-lg shadow p-6 flex flex-col h-full">
+            <h3 className="text-xl font-bold mb-6 flex justify-between items-center">
+                <span>{editingPaperId ? 'Edit Exam Paper' : 'Create New Exam Paper'}</span>
+                <button onClick={handleSavePaper} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-bold text-sm">
+                    {editingPaperId ? 'Save All Changes' : 'Create Paper'}
+                </button>
             </h3>
             
-            <div className="grid md:grid-cols-2 gap-6 mb-4">
-                <div>
-                <label className="block text-sm font-medium mb-1">Paper Title</label>
-                <input className="w-full border rounded p-2" value={paperTitle} onChange={e => setPaperTitle(e.target.value)} placeholder="e.g. React Senior Dev Assessment v2" />
+            {/* Paper Meta Data */}
+            <div className="grid md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded border">
+                <div className="md:col-span-1">
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Paper Title</label>
+                    <input className="w-full border rounded p-2 text-sm" value={paperTitle} onChange={e => setPaperTitle(e.target.value)} placeholder="e.g. Senior Dev Assessment" />
                 </div>
-                <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <input className="w-full border rounded p-2" value={paperDesc} onChange={e => setPaperDesc(e.target.value)} placeholder="Short description..." />
+                <div className="md:col-span-1">
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Description</label>
+                    <input className="w-full border rounded p-2 text-sm" value={paperDesc} onChange={e => setPaperDesc(e.target.value)} placeholder="Assessment Context..." />
                 </div>
-                <div>
-                <label className="block text-sm font-medium mb-1">Duration (minutes)</label>
-                <input type="number" className="w-full border rounded p-2" value={paperDuration} onChange={e => setPaperDuration(parseInt(e.target.value) || 60)} />
-                </div>
-            </div>
-
-            {/* CSV Import Actions */}
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-md">
-                <h4 className="font-bold text-sm text-blue-800 mb-2">Import from CSV (Recommended)</h4>
-                <p className="text-xs text-blue-600 mb-3">
-                    Use this to bulk upload questions.
-                </p>
-                <div className="flex gap-4 items-center">
-                    <button 
-                        onClick={handleDownloadTemplate}
-                        className="text-xs bg-white border border-blue-300 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50"
-                    >
-                        Download Template
-                    </button>
-                    <div className="relative">
-                        <input 
-                            type="file" 
-                            accept=".csv"
-                            ref={fileInputRef}
-                            onChange={handleImportCSV}
-                            className="hidden"
-                            id="csv-upload"
-                        />
-                        <label 
-                            htmlFor="csv-upload" 
-                            className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded cursor-pointer hover:bg-blue-700 flex items-center gap-2"
-                        >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                            Upload & Import
-                        </label>
-                    </div>
+                <div className="md:col-span-1">
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Duration (mins)</label>
+                    <input type="number" className="w-full border rounded p-2 text-sm" value={paperDuration} onChange={e => setPaperDuration(parseInt(e.target.value) || 60)} />
                 </div>
             </div>
 
-            <div className="border-t pt-6 bg-gray-50 -mx-6 px-6 pb-6">
-                <h4 className="font-bold mb-4">{editingQuestionId ? 'Edit Question' : 'Add Question Manually'}</h4>
-                <div className="bg-white p-4 rounded border mb-4 space-y-4 shadow-sm">
-                    <div>
-                        <label className="block text-sm font-medium">Question Title</label>
-                        <input className="w-full border rounded p-2" value={qTitle} onChange={e => setQTitle(e.target.value)} />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium">Question Text</label>
-                        <textarea className="w-full border rounded p-2" rows={2} value={qText} onChange={e => setQText(e.target.value)} />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium">Type</label>
-                            <select className="w-full border rounded p-2" value={qType} onChange={(e: any) => setQType(e.target.value)}>
-                                <option value="text">Text / Descriptive</option>
-                                <option value="javascript">JavaScript / React</option>
-                                <option value="python">Python</option>
-                                <option value="java">Java</option>
-                                <option value="c">C</option>
-                                <option value="cpp">C++</option>
-                                <option value="csharp">C#</option>
-                                <option value="go">Go</option>
-                                <option value="sql">SQL</option>
+            {/* CSV Import */}
+            <div className="mb-6 p-3 bg-blue-50 border border-blue-100 rounded-md flex justify-between items-center">
+                <div>
+                    <h4 className="font-bold text-xs text-blue-800">Bulk Import Questions</h4>
+                    <p className="text-[10px] text-blue-600">Import CSV to auto-fill questions.</p>
+                </div>
+                <div className="flex gap-2 items-center">
+                    <button onClick={handleDownloadTemplate} className="text-xs bg-white border border-blue-300 text-blue-700 px-3 py-1 rounded">Template</button>
+                    <label className="text-xs bg-blue-600 text-white px-3 py-1 rounded cursor-pointer hover:bg-blue-700 flex items-center gap-1">
+                        <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} className="hidden" />
+                        Upload CSV
+                    </label>
+                </div>
+            </div>
+
+            {/* Question Editor Area */}
+            <div className="border rounded-lg flex-1 flex flex-col overflow-hidden">
+                {/* Editor Header / Navigation */}
+                <div className="bg-gray-100 p-3 border-b flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                         <span className="font-bold text-gray-700">
+                            {currentQuestionIndex === -1 ? 'New Question' : `Question ${currentQuestionIndex + 1} of ${questions.length}`}
+                         </span>
+                         
+                         {questions.length > 0 && (
+                            <select 
+                                className="text-xs border rounded p-1 max-w-[150px]" 
+                                value={currentQuestionIndex} 
+                                onChange={(e) => handleJumpToQuestion(parseInt(e.target.value))}
+                            >
+                                <option value={-1}>-- New Question --</option>
+                                {questions.map((q, i) => (
+                                    <option key={i} value={i}>{i + 1}. {q.title.substring(0, 20)}...</option>
+                                ))}
                             </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium">Marks</label>
-                            <input type="number" className="w-full border rounded p-2" value={qMarks} onChange={e => setQMarks(e.target.value)} />
-                        </div>
+                         )}
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium">Ideal Answer Key (Context for AI)</label>
-                        <textarea className="w-full border rounded p-2" rows={2} value={qKey} onChange={e => setQKey(e.target.value)} />
-                    </div>
+                    
                     <div className="flex gap-2">
-                        <button onClick={handleAddOrUpdateQuestion} className="bg-brand-600 text-white px-4 py-2 rounded text-sm hover:bg-brand-700">
-                            {editingQuestionId ? 'Update Question' : 'Add Question'}
-                        </button>
-                        {editingQuestionId && (
-                             <button onClick={clearQuestionForm} className="bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-400">
-                                Cancel
-                            </button>
-                        )}
+                         <button 
+                            onClick={handlePrevQuestion}
+                            disabled={currentQuestionIndex <= 0 && currentQuestionIndex !== -1} // Disable prev if at 0
+                            className="text-xs px-3 py-1 rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
+                         >
+                            &larr; Previous
+                         </button>
+                         <button 
+                             onClick={handleNextQuestion}
+                             className="text-xs px-3 py-1 rounded bg-brand-600 text-white hover:bg-brand-700"
+                         >
+                            {currentQuestionIndex === -1 || currentQuestionIndex === questions.length - 1 ? 'Add & Next' : 'Next &rarr;'}
+                         </button>
                     </div>
                 </div>
 
-                <div className="mb-6">
-                    <h5 className="font-bold text-sm text-gray-700 mb-2">Questions in Paper ({questions.length}):</h5>
-                    {questions.length === 0 && <p className="text-gray-500 text-xs italic">No questions added yet.</p>}
-                    <div className="space-y-4">
-                        {/* Group Visualization */}
-                        {['Aptitude & Reasoning', 'Technical Assessment'].map(section => {
-                            const sectionQuestions = questions.filter(q => q.section === section);
-                            if (sectionQuestions.length === 0) return null;
-                            return (
-                                <div key={section} className="bg-gray-100 p-2 rounded">
-                                    <h6 className="text-xs font-bold text-gray-600 uppercase mb-2">{section} ({sectionQuestions.length})</h6>
-                                    <ul className="space-y-2">
-                                        {sectionQuestions.map((q, i) => (
-                                            <li key={q.id} className="bg-white p-2 rounded border flex justify-between items-center text-sm">
-                                                <span className="truncate flex-1 font-medium">{q.title} <span className="text-gray-500 font-normal">({q.marks} marks)</span></span>
-                                                <div className="flex gap-2 ml-2">
-                                                    <button onClick={() => loadQuestionForEdit(q)} className="text-blue-600 hover:text-blue-800 text-xs">Edit</button>
-                                                    <button onClick={() => removeQuestion(q.id)} className="text-red-600 hover:text-red-800 text-xs">Remove</button>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            );
-                        })}
-                        {/* Catch-all for other sections */}
-                        {questions.filter(q => !['Aptitude & Reasoning', 'Technical Assessment'].includes(q.section)).length > 0 && (
-                             <div className="bg-gray-100 p-2 rounded">
-                                <h6 className="text-xs font-bold text-gray-600 uppercase mb-2">Other Sections</h6>
-                                <ul className="space-y-2">
-                                    {questions.filter(q => !['Aptitude & Reasoning', 'Technical Assessment'].includes(q.section)).map(q => (
-                                        <li key={q.id} className="bg-white p-2 rounded border flex justify-between items-center text-sm">
-                                            <span className="truncate flex-1 font-medium">{q.title}</span>
-                                            <button onClick={() => removeQuestion(q.id)} className="text-red-600 hover:text-red-800 text-xs ml-2">Remove</button>
-                                        </li>
-                                    ))}
-                                </ul>
-                             </div>
-                        )}
+                {/* The Form */}
+                <div className="p-6 overflow-y-auto flex-1 bg-white">
+                    <div className="space-y-4 max-w-3xl mx-auto">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Section</label>
+                                <select className="w-full border rounded p-2 text-sm" value={qSection} onChange={(e) => setQSection(e.target.value)}>
+                                    <option value="Aptitude & Reasoning">Aptitude & Reasoning</option>
+                                    <option value="Technical Assessment">Technical Assessment</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Question Title</label>
+                                <input className="w-full border rounded p-2 text-sm font-medium" value={qTitle} onChange={e => setQTitle(e.target.value)} placeholder="Short title (e.g. Python List)" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Question Text</label>
+                            <textarea className="w-full border rounded p-2 text-sm h-24" value={qText} onChange={e => setQText(e.target.value)} placeholder="Full question description..." />
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Type / Language</label>
+                                <select className="w-full border rounded p-2 text-sm" value={qType} onChange={(e) => setQType(e.target.value)}>
+                                    <option value="text">Text / Descriptive</option>
+                                    <option value="javascript">JavaScript</option>
+                                    <option value="python">Python</option>
+                                    <option value="java">Java</option>
+                                    <option value="c">C</option>
+                                    <option value="cpp">C++</option>
+                                    <option value="csharp">C#</option>
+                                    <option value="go">Go</option>
+                                    <option value="sql">SQL</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Marks</label>
+                                <input type="number" className="w-full border rounded p-2 text-sm" value={qMarks} onChange={e => setQMarks(e.target.value)} />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ideal Answer / Evaluation Criteria</label>
+                            <textarea className="w-full border rounded p-2 text-sm h-24 font-mono bg-gray-50" value={qKey} onChange={e => setQKey(e.target.value)} placeholder="Correct answer or code..." />
+                        </div>
                     </div>
                 </div>
 
-                <button onClick={handleSavePaper} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-bold w-full">
-                    {editingPaperId ? 'Save Changes' : 'Create Paper'}
-                </button>
+                {/* Footer Action */}
+                <div className="bg-gray-50 p-3 border-t flex justify-between items-center">
+                    <div className="text-xs text-gray-500">
+                        {currentQuestionIndex === -1 ? 'Adding New Question' : `Editing Question ID: ${qId}`}
+                    </div>
+                    {currentQuestionIndex !== -1 && (
+                        <div className="flex gap-2">
+                             <button onClick={handleAddNewQuestion} className="text-brand-600 hover:text-brand-800 text-xs font-bold px-3 py-1 border border-brand-200 rounded bg-white">
+                                + Add Another
+                             </button>
+                             <button onClick={handleRemoveCurrentQuestion} className="text-red-600 hover:text-red-800 text-xs px-3 py-1">
+                                Delete Question
+                             </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     </div>
@@ -608,6 +710,7 @@ const Admin: React.FC = () => {
                             <th className="p-2">Email</th>
                             <th className="p-2">Paper ID</th>
                             <th className="p-2">Assigned At</th>
+                            <th className="p-2">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -616,6 +719,14 @@ const Admin: React.FC = () => {
                                 <td className="p-2">{a.email}</td>
                                 <td className="p-2">{a.paperId}</td>
                                 <td className="p-2">{new Date(a.assignedAt).toLocaleDateString()}</td>
+                                <td className="p-2">
+                                    <button 
+                                        onClick={() => handleDeleteAssignment(a.id, a.email)}
+                                        className="text-red-600 hover:text-red-800 text-xs font-bold"
+                                    >
+                                        Delete
+                                    </button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>

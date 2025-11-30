@@ -290,17 +290,17 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
                   
                   return (
                     <div key={q.id} className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <h3 className="text-lg font-bold text-gray-900">
-                              <span className="text-brand-600 mr-2">Q{globalQuestionIndex}.</span>
-                              <span className="ml-2 text-sm font-normal text-gray-500">({q.marks || 10} marks)</span>
-                          </h3>
-                        </div>
-                      </div>
                       
-                      {/* Title Removed Here */}
-                      <p className="text-gray-700 mb-4 whitespace-pre-line">{q.text}</p>
+                      {/* Q1. Text.... (Marks) */}
+                      <div className="mb-4">
+                        <p className="text-lg text-gray-800 whitespace-pre-line leading-relaxed">
+                            <span className="font-bold text-brand-700 mr-2 select-none">Q{globalQuestionIndex}.</span>
+                            {q.text}
+                            <span className="inline-block text-sm font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded ml-2 align-middle">
+                                ({q.marks || 10} Marks)
+                            </span>
+                        </p>
+                      </div>
                       
                       {isCoding ? (
                         <CodeRunner 

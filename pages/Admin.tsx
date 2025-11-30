@@ -618,13 +618,13 @@ const Admin: React.FC = () => {
                             disabled={currentQuestionIndex <= 0 && currentQuestionIndex !== -1} // Disable prev if at 0
                             className="text-xs px-3 py-1 rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
                          >
-                            &larr; Previous
+                            ← Previous
                          </button>
                          <button 
                              onClick={handleNextQuestion}
                              className="text-xs px-3 py-1 rounded bg-brand-600 text-white hover:bg-brand-700"
                          >
-                            {currentQuestionIndex === -1 || currentQuestionIndex === questions.length - 1 ? 'Add & Next' : 'Next &rarr;'}
+                            {currentQuestionIndex === -1 || currentQuestionIndex === questions.length - 1 ? 'Add & Next' : 'Next →'}
                          </button>
                     </div>
                 </div>
@@ -779,7 +779,7 @@ const Admin: React.FC = () => {
 
     return (
       <div className="space-y-6">
-        <button onClick={() => setSelectedCandidateId(null)} className="text-brand-600 hover:underline mb-4">&larr; Back to Dashboard</button>
+        <button onClick={() => setSelectedCandidateId(null)} className="text-brand-600 hover:underline mb-4">← Back to Dashboard</button>
         
         <div className="bg-white p-6 rounded-lg shadow space-y-4">
           <div className="border-b pb-4 flex justify-between items-start">

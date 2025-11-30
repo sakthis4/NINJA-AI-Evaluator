@@ -11,7 +11,7 @@ import { db } from './services/db';
 import { ToastProvider } from './contexts/ToastContext';
 
 const App: React.FC = () => {
-  // Initialize state from localStorage if available
+  // Initialize state from localStorage if available to persist sessions
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(() => {
     const saved = localStorage.getItem('app_route');
     return (saved as AppRoute) || AppRoute.LOGIN;
@@ -19,7 +19,11 @@ const App: React.FC = () => {
   
   const [currentUser, setCurrentUser] = useState<Candidate | undefined>(() => {
     const saved = localStorage.getItem('app_user');
-    return saved ? JSON.parse(saved) : undefined;
+    try {
+      return saved ? JSON.parse(saved) : undefined;
+    } catch {
+      return undefined;
+    }
   });
   
   const [isAdmin, setIsAdmin] = useState(() => {
@@ -84,7 +88,12 @@ const App: React.FC = () => {
     setCurrentUser(undefined);
     setIsAdmin(false);
     setCurrentRoute(AppRoute.LOGIN);
-    localStorage.clear(); // Clear session
+    
+    // CRITICAL FIX: Do NOT use localStorage.clear() as it wipes the offline database.
+    // Only remove session-related keys.
+    localStorage.removeItem('app_user');
+    localStorage.removeItem('app_isAdmin');
+    localStorage.removeItem('app_route');
   };
 
   const handleExamFinish = () => {

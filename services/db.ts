@@ -76,7 +76,7 @@ class DatabaseService {
   }
 
   private async seedDefaults() {
-    // 1. Seed Default Paper (Template only, no hardcoded questions from constants)
+    // 1. Seed Default Paper (Template only, no hardcoded questions)
     const defaultPaperId = 'standard-dev-eval-v1';
     
     // Check if paper exists first to avoid overwriting edits
@@ -101,9 +101,6 @@ class DatabaseService {
             await setDoc(paperRef, defaultPaper);
         }
     }
-
-    // REMOVED: ensureAssignment for alex.tester and srihariprasath44
-    // The system now starts clean. Admins must assign exams manually.
   }
 
   private async ensureAssignment(email: string, paperId: string, assignId: string) {

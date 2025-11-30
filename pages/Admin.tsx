@@ -156,9 +156,10 @@ const Admin: React.FC = () => {
   const handleEvaluate = async (submission: ExamSubmission) => {
     setEvaluatingId(submission.candidateId);
     try {
-      // Need to fetch the specific paper to know question details (marks, keys)
+      // Need to fetch the specific paper to know question details (marks, keys) AND the context description
       const paper = await db.getPaper(submission.paperId);
       if (paper) {
+        // Pass the paper description as context
         const result = await evaluateExam(paper.questions, submission.answers, paper.description);
         await db.saveEvaluation(submission.candidateId, result);
         await fetchData();
@@ -200,67 +201,74 @@ const Admin: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // ROBUST CSV PARSER to handle commas inside quoted fields
+    const parseCsvRow = (line: string): string[] => {
+        const result: string[] = [];
+        let currentVal = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    // This is an escaped quote ""
+                    currentVal += '"';
+                    i++; // Skip the next quote
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                result.push(currentVal);
+                currentVal = '';
+            } else {
+                currentVal += char;
+            }
+        }
+        result.push(currentVal);
+        return result;
+    };
+
     const reader = new FileReader();
     reader.onload = (e) => {
         const text = e.target?.result as string;
         if (!text) return;
 
         try {
-            const rows = text.split('\n');
-            const header = rows[0].toLowerCase();
-            const headerCols = header.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(h => h.replace(/^"|"$/g, '').trim()) || header.split(',').map(h => h.trim());
+            const rows = text.split('\n').filter(r => r.trim());
+            const headerRow = rows[0];
+            const headerCols = parseCsvRow(headerRow).map(h => h.toLowerCase().trim());
             
             const colMap: Record<string, number> = {};
             headerCols.forEach((col, idx) => {
                 if (col === 'id') colMap['id'] = idx;
                 if (col.includes('section')) colMap['section'] = idx;
                 if (col.includes('title')) colMap['title'] = idx;
-                if (col.includes('questiontext') || col.includes('question text')) colMap['text'] = idx;
-                if (col.includes('ideal') || col.includes('answer')) colMap['answer'] = idx;
+                if (col.includes('questiontext')) colMap['text'] = idx;
+                if (col.includes('idealanswer')) colMap['answer'] = idx;
                 if (col.includes('type')) colMap['type'] = idx;
-                if (col.includes('mark')) colMap['marks'] = idx;
+                if (col.includes('marks')) colMap['marks'] = idx;
             });
 
             const newQuestions: Question[] = [];
             const updatedQuestionsMap = new Map<string, Question>();
             const existingQuestionsMap = new Map(questions.map(q => [q.id, q]));
-
-            const dataRows = rows.slice(1).filter(r => r.trim() !== '');
+            const dataRows = rows.slice(1);
 
             dataRows.forEach((row, index) => {
-                const cols = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || row.split(',');
-                const clean = (str: string | undefined) => str ? str.replace(/^"|"$/g, '').replace(/""/g, '"').trim() : '';
-                const getVal = (key: string, fallbackIdx: number) => {
-                    if (colMap[key] !== undefined && cols[colMap[key]]) return clean(cols[colMap[key]]);
-                    if (Object.keys(colMap).length < 3 && cols[fallbackIdx]) return clean(cols[fallbackIdx]);
-                    return '';
+                if (!row.trim()) return;
+                
+                const cols = parseCsvRow(row);
+
+                const getVal = (key: string) => {
+                    return colMap[key] !== undefined ? cols[colMap[key]] || '' : '';
                 };
-
-                let idVal = '';
-                let fallbackOffset = 0;
-
-                if (colMap['id'] !== undefined) {
-                    idVal = clean(cols[colMap['id']]);
-                } else if (cols.length >= 7 && header.startsWith('id')) {
-                    idVal = clean(cols[0]);
-                    fallbackOffset = 1;
-                }
-
-                let section = getVal('section', 0 + fallbackOffset);
-                const title = getVal('title', 1 + fallbackOffset) || `Question`;
-                const qText = getVal('text', 2 + fallbackOffset);
-                const idealAnswer = getVal('answer', 3 + fallbackOffset);
-                let type = clean(getVal('type', 4 + fallbackOffset)).toLowerCase() || 'text';
-                const marks = parseInt(getVal('marks', 5 + fallbackOffset)) || 5;
-
-                if (index < 10 && !section) {
-                    section = "Aptitude & Reasoning";
-                    if (type !== 'text') type = 'text'; 
-                } else if (index < 20 && !section) {
-                    section = "Technical Assessment";
-                } else if (!section) {
-                    section = "Technical Assessment";
-                }
+                
+                const idVal = getVal('id');
+                const section = getVal('section');
+                const title = getVal('title') || `Question`;
+                const qText = getVal('text');
+                const idealAnswer = getVal('answer');
+                let type = getVal('type').toLowerCase() || 'text';
+                const marks = parseInt(getVal('marks')) || 5;
 
                 if (qText) {
                     const qObj: Question = {
@@ -286,8 +294,8 @@ const Admin: React.FC = () => {
             let addCount = 0;
 
             if (updatedQuestionsMap.size > 0) {
-                finalQs = questions.map(q => updatedQuestionsMap.has(q.id) ? updatedQuestionsMap.get(q.id)! : q);
-                finalQs = [...finalQs, ...newQuestions];
+                finalQs = questions.map(q => updatedQuestionsMap.get(q.id) || q);
+                finalQs.push(...newQuestions);
                 updateCount = updatedQuestionsMap.size;
                 addCount = newQuestions.length;
             } else {
@@ -305,7 +313,7 @@ const Admin: React.FC = () => {
             }
         } catch (err) {
             console.error("CSV Parse Error", err);
-            alert("Failed to parse CSV. Please ensure it matches the template format.");
+            alert("Failed to parse CSV. Please ensure it's a valid CSV file.");
         }
     };
     reader.readAsText(file);

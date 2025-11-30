@@ -1,6 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question, EvaluationResult, QuestionEvaluation } from '../types';
-import { EXAM_CONTEXT } from '../constants';
 
 const getApiKey = () => {
   // Support both process.env (from define) and import.meta.env
@@ -9,7 +8,8 @@ const getApiKey = () => {
 
 export const evaluateExam = async (
   questions: Question[],
-  answers: Record<string, string>
+  answers: Record<string, string>,
+  examContext: string = "Standard Technical Assessment"
 ): Promise<EvaluationResult> => {
   
   const apiKey = getApiKey();
@@ -23,8 +23,8 @@ export const evaluateExam = async (
   const ai = new GoogleGenAI({ apiKey });
 
   const systemInstruction = `
-    You are a Senior Technical Interviewer evaluating a React Developer candidate.
-    The context of the application is: ${EXAM_CONTEXT}
+    You are a Senior Technical Interviewer evaluating a candidate.
+    The context of the exam is: ${examContext}
     Evaluate the answers based on technical accuracy, conceptual understanding, and problem-solving approach.
     IMPORTANT INSTRUCTIONS FOR GRADING:
     1. The 'Context/Ideal Key' provided is a GUIDELINE for expected concepts, NOT a strict answer key. Do not require exact text matches.

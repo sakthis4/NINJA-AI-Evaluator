@@ -127,12 +127,13 @@ const Admin: React.FC = () => {
   };
 
   const handleExportPaper = (paper: QuestionPaper) => {
-    let csvContent = "data:text/csv;charset=utf-8,Section,Title,QuestionText,IdealAnswer,Type,Marks\n";
+    let csvContent = "data:text/csv;charset=utf-8,ID,Section,Title,QuestionText,IdealAnswer,Type,Marks\n";
     
     paper.questions.forEach(q => {
         // Escape quotes by doubling them, wrap fields in quotes
         const safe = (str: string) => `"${(str || '').replace(/"/g, '""')}"`;
         const row = [
+            safe(q.id),
             safe(q.section),
             safe(q.title),
             safe(q.text),
@@ -158,7 +159,7 @@ const Admin: React.FC = () => {
       // Need to fetch the specific paper to know question details (marks, keys)
       const paper = await db.getPaper(submission.paperId);
       if (paper) {
-        const result = await evaluateExam(paper.questions, submission.answers);
+        const result = await evaluateExam(paper.questions, submission.answers, paper.description);
         await db.saveEvaluation(submission.candidateId, result);
         await fetchData();
       } else {
@@ -175,15 +176,15 @@ const Admin: React.FC = () => {
 
   const handleDownloadTemplate = () => {
     // Create a CSV template with 20 rows: 10 Aptitude + 10 Technical
-    let csvContent = "data:text/csv;charset=utf-8,Section,Title,QuestionText,IdealAnswer,Type(text/python/javascript/java/cpp),Marks\n";
+    let csvContent = "data:text/csv;charset=utf-8,Section,Title,QuestionText,IdealAnswer,Type(text/script),Marks\n";
     
     // First 10: Aptitude
     for (let i = 1; i <= 10; i++) {
-        csvContent += `Aptitude & Reasoning,Aptitude Q${i},Enter question text here...,Enter answer key...,text,5\n`;
+        csvContent += `Aptitude & Reasoning,Aptitude Question,Enter question text here...,The answer is...,text,5\n`;
     }
     // Next 10: Technical
     for (let i = 1; i <= 10; i++) {
-        csvContent += `Technical Assessment,Technical Q${i},Enter question text here...,Enter answer key...,text,10\n`;
+        csvContent += `Technical Assessment,Programming Challenge,Write a function that...,def function():...,script,10\n`;
     }
 
     const encodedUri = encodeURI(csvContent);
@@ -206,26 +207,52 @@ const Admin: React.FC = () => {
 
         try {
             const rows = text.split('\n');
-            const newQuestions: Question[] = [];
+            const header = rows[0].toLowerCase();
+            const headerCols = header.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(h => h.replace(/^"|"$/g, '').trim()) || header.split(',').map(h => h.trim());
             
-            // Skip header (index 0) and filter empty lines
+            const colMap: Record<string, number> = {};
+            headerCols.forEach((col, idx) => {
+                if (col === 'id') colMap['id'] = idx;
+                if (col.includes('section')) colMap['section'] = idx;
+                if (col.includes('title')) colMap['title'] = idx;
+                if (col.includes('questiontext') || col.includes('question text')) colMap['text'] = idx;
+                if (col.includes('ideal') || col.includes('answer')) colMap['answer'] = idx;
+                if (col.includes('type')) colMap['type'] = idx;
+                if (col.includes('mark')) colMap['marks'] = idx;
+            });
+
+            const newQuestions: Question[] = [];
+            const updatedQuestionsMap = new Map<string, Question>();
+            const existingQuestionsMap = new Map(questions.map(q => [q.id, q]));
+
             const dataRows = rows.slice(1).filter(r => r.trim() !== '');
 
             dataRows.forEach((row, index) => {
-                // Regex to split by comma ONLY if not inside quotes
                 const cols = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || row.split(',');
-                
-                // Clean up quotes
-                const clean = (str: string) => str ? str.replace(/^"|"$/g, '').replace(/""/g, '"').trim() : '';
+                const clean = (str: string | undefined) => str ? str.replace(/^"|"$/g, '').replace(/""/g, '"').trim() : '';
+                const getVal = (key: string, fallbackIdx: number) => {
+                    if (colMap[key] !== undefined && cols[colMap[key]]) return clean(cols[colMap[key]]);
+                    if (Object.keys(colMap).length < 3 && cols[fallbackIdx]) return clean(cols[fallbackIdx]);
+                    return '';
+                };
 
-                let section = clean(cols[0]);
-                const title = clean(cols[1]) || `Question ${index + 1}`;
-                const qText = clean(cols[2]);
-                const idealAnswer = clean(cols[3]);
-                let type = clean(cols[4]).toLowerCase() || 'text';
-                const marks = parseInt(clean(cols[5])) || 5;
+                let idVal = '';
+                let fallbackOffset = 0;
 
-                // Enforce the 10/10 Pattern if not explicitly strict in CSV
+                if (colMap['id'] !== undefined) {
+                    idVal = clean(cols[colMap['id']]);
+                } else if (cols.length >= 7 && header.startsWith('id')) {
+                    idVal = clean(cols[0]);
+                    fallbackOffset = 1;
+                }
+
+                let section = getVal('section', 0 + fallbackOffset);
+                const title = getVal('title', 1 + fallbackOffset) || `Question`;
+                const qText = getVal('text', 2 + fallbackOffset);
+                const idealAnswer = getVal('answer', 3 + fallbackOffset);
+                let type = clean(getVal('type', 4 + fallbackOffset)).toLowerCase() || 'text';
+                const marks = parseInt(getVal('marks', 5 + fallbackOffset)) || 5;
+
                 if (index < 10 && !section) {
                     section = "Aptitude & Reasoning";
                     if (type !== 'text') type = 'text'; 
@@ -236,26 +263,42 @@ const Admin: React.FC = () => {
                 }
 
                 if (qText) {
-                    newQuestions.push({
-                        id: `q-csv-${Date.now()}-${index}`,
+                    const qObj: Question = {
+                        id: idVal || `q-csv-${Date.now()}-${index}`,
                         section: section,
                         title: title,
                         text: qText,
                         idealAnswerKey: idealAnswer,
                         codeType: type,
                         marks: marks
-                    });
+                    };
+
+                    if (idVal && existingQuestionsMap.has(idVal)) {
+                        updatedQuestionsMap.set(idVal, qObj);
+                    } else {
+                        newQuestions.push(qObj);
+                    }
                 }
             });
 
-            if (newQuestions.length > 0) {
-                setQuestions(newQuestions);
-                alert(`Successfully imported ${newQuestions.length} questions.\n\nStructure:\n- ${newQuestions.filter(q => q.section === 'Aptitude & Reasoning').length} Aptitude\n- ${newQuestions.filter(q => q.section === 'Technical Assessment').length} Technical`);
-                
-                // Set index to 0 to start editing
-                if (newQuestions.length > 0) setCurrentQuestionIndex(0);
-                
-                // Clear the file input
+            let finalQs: Question[] = [];
+            let updateCount = 0;
+            let addCount = 0;
+
+            if (updatedQuestionsMap.size > 0) {
+                finalQs = questions.map(q => updatedQuestionsMap.has(q.id) ? updatedQuestionsMap.get(q.id)! : q);
+                finalQs = [...finalQs, ...newQuestions];
+                updateCount = updatedQuestionsMap.size;
+                addCount = newQuestions.length;
+            } else {
+                finalQs = [...questions, ...newQuestions];
+                addCount = newQuestions.length;
+            }
+
+            if (finalQs.length > 0) {
+                setQuestions(finalQs);
+                alert(`Import Complete:\n- Updated: ${updateCount} questions\n- Added: ${addCount} questions`);
+                if (finalQs.length > 0) setCurrentQuestionIndex(0);
                 if (fileInputRef.current) fileInputRef.current.value = '';
             } else {
                 alert("No valid questions found in CSV.");
@@ -399,32 +442,21 @@ const Admin: React.FC = () => {
         commitCurrentQuestion();
     }
     
-    // Slight delay to ensure state update if commit happened
     await new Promise(r => setTimeout(r, 100));
     
-    // We can't rely on 'questions' state immediately if we just called setQuestions.
-    // However, in React batching, it might be okay. To be safe, re-read form if valid.
-    
-    // Re-verify length
     if (!paperTitle) {
         alert("Please provide a paper title.");
         return;
     }
     
-    // Construct final object
-    // Note: Use current state 'questions'. If user just typed in form but didn't click "Next" or "Add", 
-    // the very last edit might be pending.
-    // To solve this, let's explicitly push the current form if it looks valid and isn't saved.
     let finalQuestions = [...questions];
     
-    // If the form has valid data and we are in "New" mode (-1), add it.
-    // If we are in Edit mode, update it.
+    // Check pending form
     if (qTitle.trim() && qText.trim()) {
         const currentFormQ: Question = {
             id: qId, section: qSection, title: qTitle, text: qText, codeType: qType, marks: parseInt(qMarks) || 10, idealAnswerKey: qKey
         };
         if (currentQuestionIndex === -1) {
-             // Check if this exact ID is already in (unlikely due to timestamp)
              finalQuestions.push(currentFormQ);
         } else {
              finalQuestions[currentQuestionIndex] = currentFormQ;
@@ -474,7 +506,7 @@ const Admin: React.FC = () => {
     }
   };
 
-  // --- Subcomponents for Cleanliness ---
+  // --- Subcomponents ---
 
   const renderManageExams = () => (
     <div className="grid md:grid-cols-4 gap-6">
@@ -610,7 +642,7 @@ const Admin: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Question Title</label>
-                                <input className="w-full border rounded p-2 text-sm font-medium" value={qTitle} onChange={e => setQTitle(e.target.value)} placeholder="Short title (e.g. Python List)" />
+                                <input className="w-full border rounded p-2 text-sm font-medium" value={qTitle} onChange={e => setQTitle(e.target.value)} placeholder="Short title" />
                             </div>
                         </div>
 

@@ -1,5 +1,4 @@
 import { Candidate, ExamSubmission, ProctorLog, EvaluationResult, QuestionPaper, ExamAssignment } from '../types';
-import { QUESTIONS } from '../constants';
 import { db as firestoreDb } from './firebase';
 import { 
   collection, 
@@ -77,35 +76,34 @@ class DatabaseService {
   }
 
   private async seedDefaults() {
-    // 1. Seed Default Paper
-    const defaultPaperId = 'comprehensive-dev-v1';
-    const defaultPaper: QuestionPaper = {
-        id: defaultPaperId,
-        title: 'Comprehensive Developer Assessment',
-        description: 'A structured two-module assessment covering aptitude and technical skills (Python, DL, Git, React, AWS).',
-        questions: QUESTIONS.map(q => ({ ...q, marks: q.marks || 10 })),
-        duration: 90,
-        createdAt: Date.now()
-    };
+    // 1. Seed Default Paper (Template only, no hardcoded questions from constants)
+    const defaultPaperId = 'standard-dev-eval-v1';
+    
+    // Check if paper exists first to avoid overwriting edits
+    const existingPaper = await this.getPaper(defaultPaperId);
+    
+    if (!existingPaper) {
+        const defaultPaper: QuestionPaper = {
+            id: defaultPaperId,
+            title: 'Standard Developer Evaluation',
+            description: 'A comprehensive assessment covering Aptitude and Technical skills. (Created by System)',
+            questions: [], // Empty by default, forcing use of Admin UI/CSV Import
+            duration: 60,
+            createdAt: Date.now()
+        };
 
-    if (this.useLocalStorage) {
-        const papers = this.getLS<QuestionPaper>(LS_KEYS.PAPERS);
-        // Upsert logic for LS
-        const idx = papers.findIndex(p => p.id === defaultPaperId);
-        if (idx >= 0) {
-            papers[idx] = defaultPaper;
-        } else {
+        if (this.useLocalStorage) {
+            const papers = this.getLS<QuestionPaper>(LS_KEYS.PAPERS);
             papers.push(defaultPaper);
+            this.setLS(LS_KEYS.PAPERS, papers);
+        } else {
+            const paperRef = doc(this.db, COLLECTIONS.PAPERS, defaultPaperId);
+            await setDoc(paperRef, defaultPaper);
         }
-        this.setLS(LS_KEYS.PAPERS, papers);
-    } else {
-        const paperRef = doc(this.db, COLLECTIONS.PAPERS, defaultPaperId);
-        await setDoc(paperRef, defaultPaper, { merge: true });
     }
 
-    // 2. Seed Default Assignments
-    await this.ensureAssignment('alex.tester@example.com', defaultPaperId, 'assign-default-comp-dev-1');
-    await this.ensureAssignment('srihariprasath44@gmail.com', defaultPaperId, 'assign-srihari-comp-dev-1');
+    // REMOVED: ensureAssignment for alex.tester and srihariprasath44
+    // The system now starts clean. Admins must assign exams manually.
   }
 
   private async ensureAssignment(email: string, paperId: string, assignId: string) {
@@ -143,7 +141,9 @@ class DatabaseService {
     const timestamp = Date.now();
     const demoId = `demo-${profile}-${timestamp}`;
     const email = `demo.${profile}.${timestamp}@example.com`;
-    const defaultPaperId = 'comprehensive-dev-v1';
+    // Use the first available paper or the default ID
+    const papers = await this.getAllPapers();
+    const defaultPaperId = papers.length > 0 ? papers[0].id : 'standard-dev-eval-v1';
 
     const candidate: Candidate = {
         id: demoId,
@@ -168,16 +168,19 @@ class DatabaseService {
         await setDoc(doc(this.db, COLLECTIONS.CANDIDATES, candidate.id), candidate);
     }
 
-    // 3. Generate Answers
+    // 3. Generate Answers based on the ACTUAL paper questions
+    const paper = await this.getPaper(defaultPaperId);
     const answers: Record<string, string> = {};
-    QUESTIONS.forEach(q => {
-        if (profile === 'strong') {
-             answers[q.id] = q.idealAnswerKey;
-        } else {
-             // Simulates a shorter, less perfect answer
-             answers[q.id] = `[Demo Answer] I believe the concept involves... ${q.title.toLowerCase()}. However, I am not fully sure of the exact syntax.`;
-        }
-    });
+    
+    if (paper && paper.questions) {
+        paper.questions.forEach(q => {
+            if (profile === 'strong') {
+                 answers[q.id] = q.idealAnswerKey;
+            } else {
+                 answers[q.id] = `[Demo Answer] I believe the answer relates to... ${q.title}. Not entirely sure of the details.`;
+            }
+        });
+    }
 
     // 4. Create Submission with Answers
     const submission: ExamSubmission = {

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Question, ProctorLog, ExamSubmission } from '../types';
-import { EXAM_CONTEXT } from '../constants';
 import Proctoring from '../components/Proctoring';
 import CodeRunner from '../components/CodeRunner';
 import { db } from '../services/db';
@@ -27,6 +26,7 @@ type SaveStatus = 'saved' | 'saving' | 'error';
 
 const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [paperDescription, setPaperDescription] = useState<string>('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [proctorLogs, setProctorLogs] = useState<ProctorLog[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,6 +56,7 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
         return;
       }
       setQuestions(paper.questions);
+      setPaperDescription(paper.description);
       totalDurationRef.current = paper.duration || 60; // Use paper duration or default
 
       // Load or Initialize Submission
@@ -65,7 +66,7 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
           setProctorLogs(sub.proctorLogs);
         }
         
-        // If there's a saved draft, load it. Otherwise, start fresh.
+        // If there's a saved draft, load it.
         if (sub.answers && Object.keys(sub.answers).length > 0) {
            setAnswers(sub.answers);
         }
@@ -158,7 +159,8 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
       await db.submitExam(candidateId);
 
       try {
-        const evaluation = await withTimeout(evaluateExam(questions, answers), 60000);
+        // Pass the paper description as context for grading
+        const evaluation = await withTimeout(evaluateExam(questions, answers, paperDescription), 60000);
         await db.saveEvaluation(candidateId, evaluation);
       } catch (aiError) {
         console.error("Auto-grading skipped due to error or timeout:", aiError);
@@ -231,6 +233,8 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
     }, {} as Record<string, Question[]>);
   }, [questions]);
 
+  let globalQuestionIndex = 0;
+
   if (isLoading) {
       return <div className="p-8 text-center">Loading Exam Paper...</div>;
   }
@@ -241,7 +245,7 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
 
       <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded shadow-sm">
         <h3 className="text-blue-800 font-bold mb-2">Scenario Context</h3>
-        <p className="text-blue-900 text-sm whitespace-pre-line">{EXAM_CONTEXT}</p>
+        <p className="text-blue-900 text-sm whitespace-pre-line">{paperDescription || 'No description provided.'}</p>
       </div>
 
       <div className="bg-white shadow rounded-lg p-4 flex justify-between items-center sticky top-0 z-10 border-b">
@@ -280,35 +284,41 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
               </div>
               
               <div className="space-y-6">
-                {sectionQs.map((q) => (
-                  <div key={q.id} className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-900">
-                            {q.title} 
-                            <span className="ml-2 text-sm font-normal text-gray-500">({q.marks || 10} marks)</span>
-                        </h3>
+                {sectionQs.map((q) => {
+                  globalQuestionIndex++;
+                  const isCoding = q.codeType && q.codeType !== 'text';
+                  
+                  return (
+                    <div key={q.id} className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="text-lg font-bold text-gray-900">
+                              <span className="text-brand-600 mr-2">Q{globalQuestionIndex}.</span>
+                              {q.title} 
+                              <span className="ml-2 text-sm font-normal text-gray-500">({q.marks || 10} marks)</span>
+                          </h3>
+                        </div>
                       </div>
+                      <p className="text-gray-700 mb-4 whitespace-pre-line">{q.text}</p>
+                      
+                      {isCoding ? (
+                        <CodeRunner 
+                          code={answers[q.id] || ''} 
+                          onChange={(val) => handleAnswerChange(q.id, val)}
+                          language={q.codeType === 'script' ? 'javascript' : (q.codeType || 'javascript')}
+                        />
+                      ) : (
+                        <textarea
+                          className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-sans text-base leading-relaxed text-gray-800 resize-y"
+                          placeholder="Type your answer here..."
+                          value={answers[q.id] || ''}
+                          onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                          spellCheck={false}
+                        />
+                      )}
                     </div>
-                    <p className="text-gray-700 mb-4 whitespace-pre-line">{q.text}</p>
-                    
-                    {(q.codeType === 'javascript' || q.codeType === 'python') ? (
-                      <CodeRunner 
-                        code={answers[q.id] || ''} 
-                        onChange={(val) => handleAnswerChange(q.id, val)}
-                        language={q.codeType}
-                      />
-                    ) : (
-                      <textarea
-                        className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-sans text-base leading-relaxed text-gray-800 resize-y"
-                        placeholder="Type your answer here..."
-                        value={answers[q.id] || ''}
-                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                        spellCheck={false}
-                      />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

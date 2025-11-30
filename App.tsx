@@ -11,10 +11,39 @@ import { db } from './services/db';
 import { ToastProvider } from './contexts/ToastContext';
 
 const App: React.FC = () => {
-  const [currentRoute, setCurrentRoute] = useState<AppRoute>(AppRoute.LOGIN);
-  const [currentUser, setCurrentUser] = useState<Candidate | undefined>(undefined);
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Initialize state from localStorage if available
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>(() => {
+    const saved = localStorage.getItem('app_route');
+    return (saved as AppRoute) || AppRoute.LOGIN;
+  });
+  
+  const [currentUser, setCurrentUser] = useState<Candidate | undefined>(() => {
+    const saved = localStorage.getItem('app_user');
+    return saved ? JSON.parse(saved) : undefined;
+  });
+  
+  const [isAdmin, setIsAdmin] = useState(() => {
+    return localStorage.getItem('app_isAdmin') === 'true';
+  });
+
   const [isAppLoading, setIsAppLoading] = useState(true);
+
+  // Persist state changes
+  useEffect(() => {
+    localStorage.setItem('app_route', currentRoute);
+  }, [currentRoute]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('app_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('app_user');
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('app_isAdmin', String(isAdmin));
+  }, [isAdmin]);
 
   useEffect(() => {
     const initApp = async () => {
@@ -55,6 +84,7 @@ const App: React.FC = () => {
     setCurrentUser(undefined);
     setIsAdmin(false);
     setCurrentRoute(AppRoute.LOGIN);
+    localStorage.clear(); // Clear session
   };
 
   const handleExamFinish = () => {

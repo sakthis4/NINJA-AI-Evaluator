@@ -180,11 +180,11 @@ const Admin: React.FC = () => {
     
     // First 10: Aptitude
     for (let i = 1; i <= 10; i++) {
-        csvContent += `Aptitude & Reasoning,Aptitude Question,Enter question text here...,The answer is...,text,5\n`;
+        csvContent += `Aptitude & Reasoning,Aptitude Q${i},Enter question text here...,The answer is...,text,5\n`;
     }
     // Next 10: Technical
     for (let i = 1; i <= 10; i++) {
-        csvContent += `Technical Assessment,Programming Challenge,Write a function that...,def function():...,script,10\n`;
+        csvContent += `Technical Assessment,Technical Q${i},Write a function that...,def function():...,script,10\n`;
     }
 
     const encodedUri = encodeURI(csvContent);

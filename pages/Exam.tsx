@@ -294,11 +294,12 @@ const Exam: React.FC<ExamProps> = ({ candidateId, onFinish }) => {
                         <div>
                           <h3 className="text-lg font-bold text-gray-900">
                               <span className="text-brand-600 mr-2">Q{globalQuestionIndex}.</span>
-                              {q.title} 
                               <span className="ml-2 text-sm font-normal text-gray-500">({q.marks || 10} marks)</span>
                           </h3>
                         </div>
                       </div>
+                      
+                      {/* Title Removed Here */}
                       <p className="text-gray-700 mb-4 whitespace-pre-line">{q.text}</p>
                       
                       {isCoding ? (

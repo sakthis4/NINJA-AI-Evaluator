@@ -39,17 +39,17 @@ const Instructions: React.FC<InstructionsProps> = ({ onStart, candidateName }) =
           <div>
             <h3 className="font-bold text-lg mb-3 border-b pb-2">Exam Format</h3>
             <ul className="list-disc list-inside space-y-2 text-sm text-gray-600">
-              <li><strong>Module 1:</strong> Aptitude (20 questions on reasoning and analytics).</li>
-              <li><strong>Module 2:</strong> Technical Assessment (Python, DL, Git, React, AWS).</li>
+              <li><strong>Module 1:</strong> Aptitude & Reasoning (10 Questions).</li>
+              <li><strong>Module 2:</strong> Technical Assessment (10 Questions).</li>
+              <li><strong>Duration:</strong> 90 Minutes total.</li>
             </ul>
           </div>
           <div>
              <h3 className="font-bold text-lg mb-3 border-b pb-2">Tools & Environment</h3>
              <ul className="list-disc list-inside space-y-2 text-sm text-gray-600">
-               <li><strong>Code Editor:</strong> A built-in editor is provided for coding questions.</li>
+               <li><strong>Code Editor:</strong> A built-in editor is provided for coding questions (supports JS, Python, Java, etc.).</li>
                <li><strong>Auto-Save:</strong> Your answers are saved automatically every few seconds.</li>
-               <li><strong>JS Execution:</strong> You can run JavaScript code using the 'RUN' button.</li>
-               <li><strong>Python Validation:</strong> Use the 'Check Code' button to get AI-powered feedback on your Python solution.</li>
+               <li><strong>Execution:</strong> You can run or check your code using the 'Run' button.</li>
              </ul>
           </div>
         </div>

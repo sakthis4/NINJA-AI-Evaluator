@@ -86,9 +86,9 @@ class DatabaseService {
         const defaultPaper: QuestionPaper = {
             id: defaultPaperId,
             title: 'Standard Developer Evaluation',
-            description: 'A comprehensive assessment covering Aptitude and Technical skills. (Created by System)',
+            description: 'A comprehensive assessment covering Aptitude (10 Qs) and Technical skills (10 Qs). (Created by System)',
             questions: [], // Empty by default, forcing use of Admin UI/CSV Import
-            duration: 60,
+            duration: 90, // Updated to 90 minutes
             createdAt: Date.now()
         };
 

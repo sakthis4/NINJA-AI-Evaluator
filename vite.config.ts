@@ -1,3 +1,4 @@
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { defineConfig, loadEnv } from 'vite';
@@ -7,7 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, process.cwd(), '');
+    // Fix: Use path.resolve() or cast process to any to avoid "Property 'cwd' does not exist on type 'Process'" error
+    const env = loadEnv(mode, (process as any).cwd(), '');
     return {
       server: {
         port: 3000,
@@ -16,9 +18,8 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        // Expose env vars to the client
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        // We can also use import.meta.env in the code, which is standard for Vite
+        // Updated to use process.env.API_KEY as per Google GenAI guidelines for injected keys
+        'process.env.API_KEY': JSON.stringify(env.API_KEY),
       },
       resolve: {
         alias: {

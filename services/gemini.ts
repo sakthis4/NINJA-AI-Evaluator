@@ -1,26 +1,18 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question, EvaluationResult, QuestionEvaluation } from '../types';
 
-const getApiKey = () => {
-  // Support both process.env (from define) and import.meta.env
-  return process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
-};
-
+// Evaluation service for grading exam submissions using Gemini 3 Pro
 export const evaluateExam = async (
   questions: Question[],
   answers: Record<string, string>,
   examContext: string = "Standard Technical Assessment"
 ): Promise<EvaluationResult> => {
   
-  const apiKey = getApiKey();
   const totalMaxScore = questions.reduce((sum, q) => sum + (q.marks || 10), 0);
 
-  if (!apiKey) {
-    console.error("No API KEY found");
-    return createFallbackResult(questions, totalMaxScore, "AI Evaluation Failed: No API Key provided in .env.local");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
+  // Fix: Directly use process.env.API_KEY as required by the latest SDK guidelines
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const systemInstruction = `
     You are a Senior Technical Interviewer evaluating a candidate.
@@ -28,12 +20,13 @@ export const evaluateExam = async (
     Evaluate the answers based on technical accuracy, conceptual understanding, and problem-solving approach.
     IMPORTANT INSTRUCTIONS FOR GRADING:
     1. The 'Context/Ideal Key' provided is a GUIDELINE for expected concepts, NOT a strict answer key. Do not require exact text matches.
-    2. If the candidate provides a valid alternative solution or uses different wording that demonstrates correct understanding, award appropriate marks.
-    3. For coding questions (Javascript/React/Python/Java/etc), focus on the logic, state management, algorithmic efficiency and syntax.
-    4. For architectural/design questions, evaluate the feasibility and reasoning of their approach.
-    5. Return the output strictly in JSON format.
-    6. For each question, provide a score (0 to Max Marks) and brief feedback (max 2 sentences).
-    7. Also provide a pass/fail status (Pass if total score > 60% of max).
+    2. UNDERSTAND NATURAL LANGUAGE: Candidates may write answers in informal or conversational English, and might not use precise textbook terminology. They may have typos, grammatical errors, or poor sentence structure. Focus entirely on the underlying conceptual understanding and semantic meaning of their answer, not their language skills.
+    3. If the candidate provides a valid alternative solution or uses different wording that demonstrates correct understanding, award appropriate marks. Do not expect or require a "clean" or perfectly formatted answer.
+    4. For coding questions (Javascript/React/Python/Java/etc), focus on the logic, state management, algorithmic efficiency and syntax. Allow for pseudocode or descriptive logic if the question doesn't strictly demand executable code.
+    5. For architectural/design questions, evaluate the feasibility and reasoning of their approach.
+    6. Return the output strictly in JSON format.
+    7. For each question, provide a score (0 to Max Marks) and brief feedback (max 2 sentences).
+    8. Also provide a pass/fail status (Pass if total score > 60% of max).
   `;
 
   const userPromptParts = [`Here are the Question/Answer pairs:`];
@@ -51,12 +44,14 @@ export const evaluateExam = async (
   });
 
   try {
+    // Fix: Use gemini-3-pro-preview for complex reasoning and include a thinking budget
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-pro-preview',
       contents: userPromptParts.join('\n'),
       config: {
         systemInstruction: systemInstruction,
         responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 4000 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -82,9 +77,8 @@ export const evaluateExam = async (
       }
     });
 
-    let jsonText = response.text || '{}';
-    jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-
+    // Fix: access response.text directly as a property, not a function
+    const jsonText = response.text || '{}';
     const result = JSON.parse(jsonText);
     
     let totalScore = 0;
@@ -127,16 +121,14 @@ const createFallbackResult = (questions: Question[], maxScore: number, reason: s
   };
 };
 
+// Simulation of code execution using Gemini 3 Pro's reasoning capabilities
 export const executeCodeWithAI = async (code: string, language: string): Promise<{type: 'output' | 'error', content: string}> => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    return { type: 'error', content: "Execution failed: API Key not configured." };
-  }
   if (!code.trim()) {
     return { type: 'output', content: "There is no code to check." };
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  // Fix: Initialize client with process.env.API_KEY directly
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const systemInstruction = `
     You are a Code Execution Engine. Your task is to act as a compiler/interpreter for the programming language: "${language}".
@@ -154,12 +146,14 @@ export const executeCodeWithAI = async (code: string, language: string): Promise
   `;
 
   try {
+    // Fix: Use gemini-3-pro-preview for simulation tasks with thinking budget
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-pro-preview',
       contents: code,
       config: {
         systemInstruction: systemInstruction,
         responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 2000 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -171,8 +165,8 @@ export const executeCodeWithAI = async (code: string, language: string): Promise
       }
     });
     
-    let jsonText = response.text || '{"type": "error", "content": "AI did not return a valid response."}';
-    jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    // Fix: access response.text directly as a property
+    const jsonText = response.text || '{"type": "error", "content": "AI did not return a valid response."}';
     const result = JSON.parse(jsonText);
     return result;
 

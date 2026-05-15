@@ -101,6 +101,170 @@ class DatabaseService {
             await setDoc(paperRef, defaultPaper);
         }
     }
+
+    // 2. Seed Web Application & Aptitude Evaluation
+    const webPaperId = 'web-aptitude-eval-v2';
+    const existingWebPaper = await this.getPaper(webPaperId);
+
+    if (!existingWebPaper) {
+        const webPaper: QuestionPaper = {
+            id: webPaperId,
+            title: 'Basic HTML, CSS & Aptitude Assessment v2',
+            description: 'This paper evaluates foundational knowledge in HTML, CSS, and general aptitude.',
+            duration: 90,
+            createdAt: Date.now(),
+            questions: [
+                {
+                    id: 'apt1',
+                    section: 'Aptitude',
+                    title: 'Number Series 1',
+                    text: 'What comes next in the sequence: 2, 6, 12, 20, X?',
+                    idealAnswerKey: '30. The differences are 4, 6, 8, 10.',
+                    marks: 5
+                },
+                {
+                    id: 'apt2',
+                    section: 'Aptitude',
+                    title: 'Time and Work',
+                    text: 'If A can do a piece of work in 10 days and B can do the same work in 15 days, how long will they take to complete it if they work together?',
+                    idealAnswerKey: '6 days.',
+                    marks: 5
+                },
+                {
+                    id: 'apt3',
+                    section: 'Aptitude',
+                    title: 'Ages',
+                    text: 'The sum of ages of 5 children born at the intervals of 3 years each is 50 years. What is the age of the youngest child?',
+                    idealAnswerKey: '4 years.',
+                    marks: 5
+                },
+                {
+                    id: 'apt4',
+                    section: 'Aptitude',
+                    title: 'Trains',
+                    text: 'A train 125 m long passes a man, running at 5 km/hr in the same direction in which the train is going, in 10 seconds. The speed of the train is:',
+                    idealAnswerKey: '50 km/hr.',
+                    marks: 5
+                },
+                {
+                    id: 'apt5',
+                    section: 'Aptitude',
+                    title: 'Percentages',
+                    text: 'Two students appeared at an examination. One of them secured 9 marks more than the other and his marks was 56% of the sum of their marks. The marks obtained by them are:',
+                    idealAnswerKey: '42 and 33.',
+                    marks: 5
+                },
+                {
+                    id: 'apt6',
+                    section: 'Aptitude',
+                    title: 'Profits and Loss',
+                    text: 'If the cost price of 12 pens is equal to the selling price of 8 pens, the gain percent is?',
+                    idealAnswerKey: '50%.',
+                    marks: 5
+                },
+                {
+                    id: 'apt7',
+                    section: 'Aptitude',
+                    title: 'Averages',
+                    text: 'The average of 20 numbers is zero. Of them, at the most, how many may be greater than zero?',
+                    idealAnswerKey: '19.',
+                    marks: 5
+                },
+                {
+                    id: 'apt8',
+                    section: 'Aptitude',
+                    title: 'Simple Interest',
+                    text: 'A sum of money at simple interest amounts to Rs. 815 in 3 years and to Rs. 854 in 4 years. The sum is:',
+                    idealAnswerKey: 'Rs. 698.',
+                    marks: 5
+                },
+                {
+                    id: 'apt9',
+                    section: 'Aptitude',
+                    title: 'Speed and distance',
+                    text: 'A person crosses a 600 m long street in 5 minutes. What is his speed in km per hour?',
+                    idealAnswerKey: '7.2 km/hr.',
+                    marks: 5
+                },
+                {
+                    id: 'apt10',
+                    section: 'Aptitude',
+                    title: 'Ratios',
+                    text: 'A and B together have Rs. 1210. If 4/15 of A\'s amount is equal to 2/5 of B\'s amount, how much amount does B have?',
+                    idealAnswerKey: 'Rs. 484.',
+                    marks: 5
+                },
+                {
+                    id: 'html1',
+                    section: 'HTML',
+                    title: 'Semantic HTML5',
+                    text: 'Explain the difference between a <div> and a <section> in HTML5. Provide an example of when to use each.',
+                    idealAnswerKey: '<div> is an unsemantic container. <section> represents a standalone thematic block of content.',
+                    marks: 10
+                },
+                {
+                    id: 'html2',
+                    section: 'HTML',
+                    title: 'Forms and Inputs',
+                    text: 'Write the HTML code to create a simple login form containing an email input, a password input, and a submit button. The form should aim to post to `/login`.',
+                    idealAnswerKey: 'Using <form action=\"/login\" method=\"POST\"> with input type email and password.',
+                    codeType: 'html',
+                    marks: 10
+                },
+                {
+                    id: 'html3',
+                    section: 'HTML',
+                    title: 'Alt Text',
+                    text: 'Why is the alt attribute important for images? What happens if it is omitted?',
+                    idealAnswerKey: 'It is important for accessibility (screen readers) and when the image fails to load. If omitted, screen readers might announce the file name, which is unhelpful.',
+                    marks: 10
+                },
+                {
+                    id: 'html4',
+                    section: 'HTML',
+                    title: 'Tables',
+                    text: 'Write the HTML code to create a simple table with two columns \"Name\" and \"Age\", and one row of data \"John\", \"30\".',
+                    idealAnswerKey: '<table><tr><th>Name</th><th>Age</th></tr><tr><td>John</td><td>30</td></tr></table>',
+                    codeType: 'html',
+                    marks: 10
+                },
+                {
+                    id: 'html5',
+                    section: 'HTML',
+                    title: 'Meta Tags',
+                    text: 'What are meta tags in HTML? Provide an example of a meta tag used for responsive design.',
+                    idealAnswerKey: 'Meta tags provide metadata about the HTML document. <meta name="viewport" content="width=device-width, initial-scale=1.0"> is used for responsive design.',
+                    marks: 10
+                },
+                {
+                    id: 'css1',
+                    section: 'CSS',
+                    title: 'CSS Specificity',
+                    text: 'Explain CSS Specificity. If an element has an inline style and a conflicting CSS rule with an ID selector, which one will be applied?',
+                    idealAnswerKey: 'Inline styles have higher specificity than ID selectors.',
+                    marks: 10
+                },
+                {
+                    id: 'css2',
+                    section: 'CSS',
+                    title: 'Flexbox Layout',
+                    text: 'Write a basic CSS snippet snippet using Flexbox to perfectly center a child `div` horizontally and vertically inside a parent `div` taking up the full viewport height.',
+                    idealAnswerKey: 'display: flex; justify-content: center; align-items: center; height: 100vh;',
+                    codeType: 'css',
+                    marks: 10
+                }
+            ]
+        };
+
+        if (this.useLocalStorage) {
+            const papers = this.getLS<QuestionPaper>(LS_KEYS.PAPERS);
+            papers.push(webPaper);
+            this.setLS(LS_KEYS.PAPERS, papers);
+        } else {
+            const paperRef = doc(this.db, COLLECTIONS.PAPERS, webPaperId);
+            await setDoc(paperRef, webPaper);
+        }
+    }
   }
 
   private async ensureAssignment(email: string, paperId: string, assignId: string) {

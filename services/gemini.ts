@@ -20,13 +20,14 @@ export const evaluateExam = async (
     Evaluate the answers based on technical accuracy, conceptual understanding, and problem-solving approach.
     IMPORTANT INSTRUCTIONS FOR GRADING:
     1. The 'Context/Ideal Key' provided is a GUIDELINE for expected concepts, NOT a strict answer key. Do not require exact text matches.
-    2. UNDERSTAND NATURAL LANGUAGE: Candidates may write answers in informal or conversational English, and might not use precise textbook terminology. They may have typos, grammatical errors, or poor sentence structure. Focus entirely on the underlying conceptual understanding and semantic meaning of their answer, not their language skills.
-    3. If the candidate provides a valid alternative solution or uses different wording that demonstrates correct understanding, award appropriate marks. Do not expect or require a "clean" or perfectly formatted answer.
-    4. For coding questions (Javascript/React/Python/Java/etc), focus on the logic, state management, algorithmic efficiency and syntax. Allow for pseudocode or descriptive logic if the question doesn't strictly demand executable code.
-    5. For architectural/design questions, evaluate the feasibility and reasoning of their approach.
+    2. EXTREMELY LENIENT NATURAL LANGUAGE PROCESSING: Candidates may write answers in very informal or conversational English, use sentence fragments, or explain it in their own words completely avoiding textbook terminology. They may have typos, poor grammar, or unstructured thoughts.
+       Your primary goal is to EXTRACT SEMANTIC MEANING. If the candidate's answer broadly hits the fundamental concept or shows they understand the core logic, you MUST award full or partial marks. Never penalize for brevity or grammatical incorrectness.
+    3. If the candidate provides a valid alternative solution or uses different wording that demonstrates correct understanding, award appropriate marks. Do not expect or require a "clean" or perfectly formatted answer. Wait for the intent of the candidate before grading.
+    4. For coding questions (Javascript/React/Python/Java/etc), focus on the logic, state management, algorithmic efficiency and syntax. Allow for pseudocode or descriptive logic if the question doesn't strictly demand executable code. Focus on their thought process.
+    5. For architectural/design questions, evaluate the feasibility and reasoning of their approach. Open ended answers are fine.
     6. Return the output strictly in JSON format.
     7. For each question, provide a score (0 to Max Marks) and brief feedback (max 2 sentences).
-    8. Also provide a pass/fail status (Pass if total score > 60% of max).
+    8. Also provide a pass/fail status (Pass if total score > 40% of max score).
   `;
 
   const userPromptParts = [`Here are the Question/Answer pairs:`];
@@ -44,14 +45,13 @@ export const evaluateExam = async (
   });
 
   try {
-    // Fix: Use gemini-3-pro-preview for complex reasoning and include a thinking budget
+    // Fix: Use gemini-3.1-pro-preview for complex reasoning and include a thinking budget
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3.1-pro-preview',
       contents: userPromptParts.join('\n'),
       config: {
         systemInstruction: systemInstruction,
         responseMimeType: 'application/json',
-        thinkingConfig: { thinkingBudget: 4000 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -146,14 +146,13 @@ export const executeCodeWithAI = async (code: string, language: string): Promise
   `;
 
   try {
-    // Fix: Use gemini-3-pro-preview for simulation tasks with thinking budget
+    // Fix: Use gemini-3.1-pro-preview for simulation tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3.1-pro-preview',
       contents: code,
       config: {
         systemInstruction: systemInstruction,
         responseMimeType: 'application/json',
-        thinkingConfig: { thinkingBudget: 2000 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {

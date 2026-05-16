@@ -79,7 +79,14 @@ export const evaluateExam = async (
 
     // Fix: access response.text directly as a property, not a function
     const jsonText = response.text || '{}';
-    const result = JSON.parse(jsonText);
+    let result: any = {};
+    try {
+      const cleanJsonText = jsonText.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/i, '').trim();
+      result = JSON.parse(cleanJsonText);
+    } catch (e) {
+      console.error("Error parsing Gemini response:", e, jsonText);
+      throw new Error("Invalid formulation of AI JSON response.");
+    }
     
     let totalScore = 0;
     const evaluations: Record<string, QuestionEvaluation> = {};
@@ -166,7 +173,14 @@ export const executeCodeWithAI = async (code: string, language: string): Promise
     
     // Fix: access response.text directly as a property
     const jsonText = response.text || '{"type": "error", "content": "AI did not return a valid response."}';
-    const result = JSON.parse(jsonText);
+    let result;
+    try {
+      const cleanJsonText = jsonText.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/i, '').trim();
+      result = JSON.parse(cleanJsonText);
+    } catch (e) {
+      console.error("Error parsing Gemini execution response:", e, jsonText);
+      result = { type: 'error', content: "Invalid JSON response from AI." };
+    }
     return result;
 
   } catch (error) {

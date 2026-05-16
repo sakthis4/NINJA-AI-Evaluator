@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
       plugins: [react()],
       define: {
         // Updated to use process.env.API_KEY as per Google GenAI guidelines for injected keys
-        'process.env.API_KEY': JSON.stringify(env.API_KEY),
+        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY),
       },
       resolve: {
         alias: {
